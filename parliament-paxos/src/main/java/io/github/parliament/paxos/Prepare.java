@@ -1,9 +1,9 @@
 package io.github.parliament.paxos;
 
-public class Prepare<T> {
+public class Prepare<T extends Comparable<T>> {
     private boolean ok;
-    private Comparable<T> n;
-    private Comparable<T> na;
+    private T n;
+    private T na;
     private byte[] va;
 
     public boolean isOk() {
@@ -14,19 +14,19 @@ public class Prepare<T> {
         this.ok = ok;
     }
 
-    public Comparable<T> getN() {
+    public T getN() {
         return n;
     }
 
-    void setN(Comparable<T> n) {
+    void setN(T n) {
         this.n = n;
     }
 
-    public Comparable<T> getNa() {
+    public T getNa() {
         return na;
     }
 
-    void setNa(Comparable<T> na) {
+    void setNa(T na) {
         this.na = na;
     }
 

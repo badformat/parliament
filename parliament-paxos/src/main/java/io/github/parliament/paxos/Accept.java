@@ -1,8 +1,8 @@
 package io.github.parliament.paxos;
 
-public class Accept<T> {
+public class Accept<T extends Comparable<?>> {
     private boolean ok;
-    private Comparable<T> n;
+    private T n;
 
     public boolean isOk() {
         return ok;
@@ -12,11 +12,11 @@ public class Accept<T> {
         this.ok = ok;
     }
 
-    public Comparable<T> getN() {
+    public T getN() {
         return n;
     }
 
-    void setN(Comparable<T> n) {
+    void setN(T n) {
         this.n = n;
     }
 }

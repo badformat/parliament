@@ -6,8 +6,8 @@ package io.github.parliament.paxos;
  *
  * @param <T> 可比较类型
  */
-public interface Acceptor<T> {
-    Prepare<T> prepare(Comparable<T> n);
+public interface Acceptor<T extends Comparable<T>> {
+    Prepare<T> prepare(T n);
 
-    Accept<T> accept(Comparable<T> n, byte[] value);
+    Accept<T> accept(T n, byte[] value);
 }
