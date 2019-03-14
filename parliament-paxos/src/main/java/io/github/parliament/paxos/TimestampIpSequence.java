@@ -1,12 +1,12 @@
 package io.github.parliament.paxos;
 
-public class DefaultProposalSeqNoGenerator implements ProposalSeqNoGenerator<String> {
+public class TimestampIpSequence implements Sequence<String> {
 
     @Override
     public String next() {
         long m = System.currentTimeMillis();
-        
-        return null;
+
+        return String.valueOf(m);
     }
 
 }

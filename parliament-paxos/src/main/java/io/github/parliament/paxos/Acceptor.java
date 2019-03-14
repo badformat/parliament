@@ -10,4 +10,6 @@ public interface Acceptor<T extends Comparable<T>> {
     Prepare<T> prepare(T n);
 
     Accept<T> accept(T n, byte[] value);
+
+    void decided(byte[] agreement);
 }
