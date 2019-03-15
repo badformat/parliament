@@ -65,7 +65,7 @@ public class Proposer<T extends Comparable<T>> extends Observable {
             }
             ok++;
             T na = prepare.getNa();
-            if (na.compareTo(max) > 0) {
+            if (na != null && na.compareTo(max) > 0) {
                 max = na;
                 agreement = prepare.getVa();
             }
@@ -78,9 +78,6 @@ public class Proposer<T extends Comparable<T>> extends Observable {
         if (prepare.isOk()) {
             Preconditions.checkState(Objects.equals(prepare.getN(), n),
                     acceptor + " prepare请求返回序号为" + prepare.getN() + "，应该是" + n);
-            Preconditions.checkNotNull(prepare.getNa(), acceptor + "返回prepare的当前接收编号为null");
-            Preconditions.checkNotNull(prepare.getVa(), acceptor + "返回prepare的当前接收值为null");
-            Preconditions.checkState(prepare.getVa().length > 0, acceptor + "返回prepare的当前接收值长度为0");
         }
     }
 

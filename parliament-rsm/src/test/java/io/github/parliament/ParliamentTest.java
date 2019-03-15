@@ -1,7 +1,8 @@
 package io.github.parliament;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.github.parliament.paxos.Acceptor;
+import io.github.parliament.paxos.LocalAcceptor;
 import io.github.parliament.paxos.Proposal;
 import io.github.parliament.paxos.TimestampIpSequence;
 
@@ -36,8 +38,7 @@ class ParliamentTest {
     static void setUpBeforeClass() {
 
         for (int i = 0; i < 4; i++) {
-            @SuppressWarnings("unchecked")
-            Acceptor<String> accepotr = mock(Acceptor.class);
+            Acceptor<String> accepotr = new LocalAcceptor<>();
             acceptors.add(accepotr);
         }
 
