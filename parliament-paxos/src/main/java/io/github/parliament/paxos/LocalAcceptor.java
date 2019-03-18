@@ -1,9 +1,15 @@
 package io.github.parliament.paxos;
 
+import lombok.Getter;
+
 public class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
+    @Getter
     private T np;
+    @Getter
     private T na;
+    @Getter
     private byte[] va;
+    // TODO 持久化策略协作对象
 
     @Override
     public Prepare<T> prepare(T n) {

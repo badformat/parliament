@@ -29,7 +29,7 @@ class ProposerTest {
     private Acceptor<String> acc5;
 
     private AtomicInteger ai = new AtomicInteger();
-    private Proposal proposal;
+    private byte[] proposal;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -40,7 +40,7 @@ class ProposerTest {
         acceptors.add(acc4);
         acceptors.add(acc5);
 
-        proposal = new Proposal(1L, "proposal".getBytes());
+        proposal =  "proposal".getBytes();
         proposer = new Proposer<String>(acceptors, seqNoGenerator, proposal);
 
         when(seqNoGenerator.next()).thenAnswer((ctx) -> {
@@ -64,7 +64,7 @@ class ProposerTest {
         acceptors.forEach((acc) -> {
             when(acc.prepare(anyString())).thenAnswer((ctx) -> {
                 String n = ctx.getArgument(0);
-                return Prepare.ok(n, n, proposal.getContent());
+                return Prepare.ok(n, n, proposal);
             });
 
             when(acc.accept(anyString(), any())).thenAnswer((ctx) -> {
@@ -90,7 +90,7 @@ class ProposerTest {
         when(acc3.prepare(anyString())).thenReturn(rejectPrepare);
 
         proposer.setN(n);
-        Prepare<String> prepare = Prepare.ok(n, n, proposal.getContent());
+        Prepare<String> prepare = Prepare.ok(n, n, proposal);
 
         when(acc4.prepare(anyString())).thenReturn(prepare);
         when(acc5.prepare(anyString())).thenReturn(prepare);
@@ -109,7 +109,7 @@ class ProposerTest {
         when(acc2.prepare(anyString())).thenReturn(rejectPrepare);
 
         proposer.setN(n);
-        Prepare<String> prepare = Prepare.ok(n, n, proposal.getContent());
+        Prepare<String> prepare = Prepare.ok(n, n, proposal);
 
         when(acc3.prepare(anyString())).thenReturn(prepare);
         when(acc4.prepare(anyString())).thenReturn(prepare);
@@ -127,7 +127,7 @@ class ProposerTest {
         when(acc2.prepare(anyString())).thenReturn(rejectPrepare);
 
         proposer.setN(n);
-        Prepare<String> prepare = Prepare.ok(n, n, proposal.getContent());
+        Prepare<String> prepare = Prepare.ok(n, n, proposal);
 
         when(acc3.prepare(anyString())).thenReturn(prepare);
         when(acc4.prepare(anyString())).thenReturn(prepare);

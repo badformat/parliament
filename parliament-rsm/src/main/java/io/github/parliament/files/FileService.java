@@ -1,4 +1,4 @@
-package io.github.parliament;
+package io.github.parliament.files;
 
 import java.nio.ByteBuffer;
 import java.nio.file.Path;

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
-import java.util.Observable;
 
 import com.google.common.base.Preconditions;
 
@@ -13,7 +12,7 @@ import com.google.common.base.Preconditions;
  * @author zy
  * @version $Id: Proposer.java, v 0.1 2019年03月08日 3:17 PM zy Exp $
  */
-public class Proposer<T extends Comparable<T>> extends Observable {
+public class Proposer<T extends Comparable<T>> {
     private Collection<Acceptor<T>> acceptors;
     private int majority = Integer.MAX_VALUE;
     private Sequence<T> sequence;
@@ -21,17 +20,15 @@ public class Proposer<T extends Comparable<T>> extends Observable {
     private T n;
     private T max;
     private byte[] agreement;
-    Proposal proposal = null;
 
-    public Proposer(Collection<Acceptor<T>> acceptors, Sequence<T> sequence, Proposal proposal) {
+    public Proposer(Collection<Acceptor<T>> acceptors, Sequence<T> sequence, byte[] proposal) {
         this.acceptors = acceptors;
         this.majority = calcMajority(acceptors.size());
         this.sequence = sequence;
-        this.proposal = proposal;
-        this.agreement = proposal.getContent();
+        this.agreement = proposal;
     }
 
-    public void propose() {
+    public byte[] propose() {
         while (!decided) {
             n = sequence.next();
             if (prepare()) {
@@ -42,6 +39,8 @@ public class Proposer<T extends Comparable<T>> extends Observable {
         for (Acceptor<T> acceptor : acceptors) {
             acceptor.decided(agreement);
         }
+
+        return agreement;
     }
 
     public boolean isDecided() {

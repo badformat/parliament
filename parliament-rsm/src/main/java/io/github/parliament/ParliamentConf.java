@@ -1,35 +1,34 @@
 package io.github.parliament;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import io.github.parliament.paxos.Acceptor;
+import io.github.parliament.files.FileService;
+import io.github.parliament.files.DefaultFileService;
 import io.github.parliament.paxos.Sequence;
+import io.github.parliament.persistence.ProposalPersistenceServie;
 import lombok.Builder;
-import lombok.Singular;
+import lombok.Getter;
 
 @Builder
 public class ParliamentConf<T extends Comparable<T>> {
-    @Singular
-    private List<Acceptor<T>> acceptors;
+    @Getter
+    private AcceptorFactory<T> acceptorManager;
+
+    @Getter
     private String dataDir;
+
     @Builder.Default
-    private FileService fileService = new DefaultFileService();
+    @Getter
+    private FileService fileservice = new DefaultFileService();
+
+    @Getter
+    private ProposalPersistenceServie proposalPersistenceService;
+
+    @Builder.Default
+    @Getter
+    private ExecutorService executorService = Executors.newFixedThreadPool(100);
+
+    @Getter
     private Sequence<T> sequence;
-
-    public List<Acceptor<T>> getAcceptors() {
-        return Collections.unmodifiableList(acceptors);
-    }
-
-    public String getDataDir() {
-        return this.dataDir;
-    }
-
-    public FileService getFileService() {
-        return fileService;
-    }
-
-    public Sequence<T> getSequence() {
-        return sequence;
-    }
 }
