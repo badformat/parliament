@@ -4,7 +4,7 @@ import com.google.inject.AbstractModule;
 
 import io.github.parliament.paxos.Paxos;
 
-public class PaxosModule extends AbstractModule {
+public class PaxosAcceptorServerModule extends AbstractModule {
     @Override
     public void configure() {
     }

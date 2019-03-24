@@ -1,4 +1,4 @@
-package io.github.parliament.peers;
+package io.github.parliament.peer;
 
 import java.util.Collection;
 
