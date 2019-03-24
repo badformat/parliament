@@ -1,4 +1,4 @@
-package io.github.parliament.paxos;
+package io.github.parliament.paxos.proposer;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -11,6 +11,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import io.github.parliament.paxos.acceptor.Accept;
+import io.github.parliament.paxos.acceptor.Acceptor;
+import io.github.parliament.paxos.acceptor.Prepare;
+import io.github.parliament.paxos.proposer.Proposer;
+import io.github.parliament.paxos.proposer.Sequence;
 
 class ProposerTest {
     private Proposer<String> proposer;
@@ -40,7 +46,7 @@ class ProposerTest {
         acceptors.add(acc4);
         acceptors.add(acc5);
 
-        proposal =  "proposal".getBytes();
+        proposal = "proposal".getBytes();
         proposer = new Proposer<String>(acceptors, seqNoGenerator, proposal);
 
         when(seqNoGenerator.next()).thenAnswer((ctx) -> {
@@ -131,9 +137,9 @@ class ProposerTest {
 
         when(acc3.prepare(anyString())).thenReturn(prepare);
         when(acc4.prepare(anyString())).thenReturn(prepare);
-        prepare.setNa(seqNoGenerator.next());
+
         byte[] va = "another proposal".getBytes();
-        prepare.setVa(va);
+        prepare = Prepare.ok(n, seqNoGenerator.next(), va);
         when(acc5.prepare(anyString())).thenReturn(prepare);
 
         assertTrue(proposer.prepare());

@@ -9,26 +9,13 @@
 		<artifactId>parliament</artifactId>
 		<version>${parliament.version}</version>
 	</parent>
-	<artifactId>parliament-rsm</artifactId>
-	<name>parliament-rsm</name>
+	<artifactId>parliament-resp</artifactId>
+	<name>parliament-resp</name>
 	<url>http://maven.apache.org</url>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
-
 	<dependencies>
-		<dependency>
-			<groupId>io.github.parliament</groupId>
-			<artifactId>parliament-paxos</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>io.github.parliament</groupId>
-			<artifactId>parliament-resp</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.google.inject</groupId>
-			<artifactId>guice</artifactId>
-		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
@@ -54,5 +41,4 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
-
 </project>

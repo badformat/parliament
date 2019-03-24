@@ -1,58 +1,85 @@
 package io.github.parliament;
 
-import java.nio.ByteBuffer;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.Optional;
 
 import com.google.common.base.Preconditions;
 
 import io.github.parliament.files.FileService;
-import io.github.parliament.paxos.Acceptor;
+import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.persistence.ProposalPersistenceServie;
 
 public class ProposalFilePersistence implements ProposalPersistenceServie {
     private Path path;
     private FileService fileService;
 
-    public ProposalFilePersistence(Path path, FileService fileservice) {
+    public ProposalFilePersistence(Path path, FileService fileservice) throws Exception {
         this.path = path;
         this.fileService = fileservice;
+        this.fileService.createDir(path);
     }
 
     @Override
-    public void persistenceProposal(Proposal proposal) throws Exception {
+    public void saveProposal(Proposal proposal) throws Exception {
         Path file = buildProposalFilePath(proposal.getRound());
         Preconditions.checkState(!fileService.exists(file), "该轮提案文件已存在");
-
-        ByteBuffer bb = ByteBuffer.wrap(proposal.getContent());
-
-        fileService.writeAll(file, bb);
+        // TODO lock file
+        fileService.createFile(file);
+        try (ObjectOutputStream os = new ObjectOutputStream(Files.newOutputStream(file, StandardOpenOption.WRITE))) {
+            os.writeObject(proposal);
+        }
     }
 
     @Override
-    public void persistenceAcceptor(long round, Acceptor<?> acceptor) {
-        // TODO Auto-generated method stub
-    }
-
-    @Override
-    public Optional<Proposal> recoverProposal(long round) throws Exception {
+    public Optional<Proposal> getProposal(long round) throws Exception {
         Path file = buildProposalFilePath(round);
-
         if (!fileService.exists(file)) {
             return Optional.empty();
         }
-        byte[] content = fileService.readAll(file);
-        return Optional.of(new Proposal(round, content));
+
+        try (ObjectInputStream is = new ObjectInputStream(Files.newInputStream(file))) {
+            return Optional.of((Proposal) is.readObject());
+        }
+    }
+//
+//    @Override
+//    public void saveAcceptor(long round, Acceptor<?> acceptor) throws Exception {
+//        Path proposalfile = buildProposalFilePath(round);
+//        Preconditions.checkState(fileService.exists(proposalfile), "该轮提案文件还不存在");
+//
+//        Path acceptorFile = buildAcceptorFilePath(round);
+//        if (!fileService.exists(acceptorFile)) {
+//            fileService.createFile(acceptorFile);
+//        }
+//
+//        try (ObjectOutputStream os = new ObjectOutputStream(
+//                Files.newOutputStream(acceptorFile, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING))) {
+//            os.writeObject(acceptor);
+//        }
+//    }
+//
+//    @SuppressWarnings("unchecked")
+//    @Override
+//    public <T extends Serializable & Comparable<T>> Acceptor<T> getAcceptor(long round) throws Exception {
+//        Path file = buildAcceptorFilePath(round);
+//        Preconditions.checkState(fileService.exists(file), "该轮acceptor文件还不存在");
+//
+//        try (ObjectInputStream is = new ObjectInputStream(Files.newInputStream(file))) {
+//            return (Acceptor<T>) is.readObject();
+//        }
+//    }
+
+    private Path buildProposalFilePath(long round) {
+        return Paths.get(path.toString(), "proposal_" + round);
     }
 
-    @Override
-    public Acceptor<?> recoverAcceptor(long round) {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    private Path buildProposalFilePath(long seq) {
-        return Paths.get(path.toString(), "proposal_" + seq);
+    private Path buildAcceptorFilePath(long round) {
+        return Paths.get(path.toString(), "acceptor_" + round);
     }
 }

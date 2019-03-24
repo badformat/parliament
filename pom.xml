@@ -12,6 +12,8 @@
 	<modules>
 		<module>parliament-paxos</module>
 		<module>parliament-rsm</module>
+		<module>parliament-resp</module>
+		<module>parliament-server</module>
 	</modules>
 
 	<properties>
@@ -27,6 +29,11 @@
 			<dependency>
 				<groupId>io.github.parliament</groupId>
 				<artifactId>parliament-paxos</artifactId>
+				<version>${parliament.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.github.parliament</groupId>
+				<artifactId>parliament-resp</artifactId>
 				<version>${parliament.version}</version>
 			</dependency>
 			<dependency>

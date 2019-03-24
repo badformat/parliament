@@ -1,7 +1,9 @@
 package io.github.parliament.files;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -46,6 +48,16 @@ public class DefaultFileService implements FileService {
     @Override
     public boolean exists(Path file) {
         return Files.exists(file);
+    }
+
+    @Override
+    public WritableByteChannel newWritableByteChannel(Path file) throws IOException {
+        return Files.newByteChannel(file, StandardOpenOption.WRITE);
+    }
+
+    @Override
+    public SeekableByteChannel newReadOnlySeekableByteChannel(Path file) throws IOException {
+        return Files.newByteChannel(file, StandardOpenOption.READ);
     }
 
 }

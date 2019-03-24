@@ -1,15 +1,18 @@
-package io.github.parliament.paxos;
+package io.github.parliament.paxos.acceptor;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 
-public class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
+@EqualsAndHashCode
+@ToString
+public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
     @Getter
     private T np;
     @Getter
     private T na;
     @Getter
     private byte[] va;
-    // TODO 持久化策略协作对象
 
     @Override
     public Prepare<T> prepare(T n) {
@@ -32,9 +35,5 @@ public class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
     }
 
     @Override
-    public void decided(byte[] agreement) {
-        // TODO Auto-generated method stub
-
-    }
-
+    abstract public void decided(byte[] agreement);
 }

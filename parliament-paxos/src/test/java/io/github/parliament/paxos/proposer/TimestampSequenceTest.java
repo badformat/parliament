@@ -1,9 +1,11 @@
-package io.github.parliament.paxos;
+package io.github.parliament.paxos.proposer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import io.github.parliament.paxos.proposer.TimestampSequence;
 
 class TimestampSequenceTest {
 

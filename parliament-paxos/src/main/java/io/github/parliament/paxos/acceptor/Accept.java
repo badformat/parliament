@@ -1,4 +1,4 @@
-package io.github.parliament.paxos;
+package io.github.parliament.paxos.acceptor;
 
 public class Accept<T extends Comparable<T>> {
     private boolean ok;

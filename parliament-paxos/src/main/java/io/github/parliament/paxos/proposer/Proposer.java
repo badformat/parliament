@@ -1,4 +1,4 @@
-package io.github.parliament.paxos;
+package io.github.parliament.paxos.proposer;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -6,6 +6,10 @@ import java.util.List;
 import java.util.Objects;
 
 import com.google.common.base.Preconditions;
+
+import io.github.parliament.paxos.acceptor.Accept;
+import io.github.parliament.paxos.acceptor.Acceptor;
+import io.github.parliament.paxos.acceptor.Prepare;
 
 /**
  *

@@ -27,11 +27,12 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import io.github.parliament.files.DefaultFileService;
-import io.github.parliament.paxos.Acceptor;
-import io.github.parliament.paxos.LocalAcceptor;
-import io.github.parliament.paxos.Prepare;
-import io.github.parliament.paxos.Sequence;
-import io.github.parliament.paxos.TimestampSequence;
+import io.github.parliament.paxos.acceptor.Acceptor;
+import io.github.parliament.paxos.acceptor.AcceptorFactory;
+import io.github.parliament.paxos.acceptor.LocalAcceptor;
+import io.github.parliament.paxos.acceptor.Prepare;
+import io.github.parliament.paxos.proposer.Sequence;
+import io.github.parliament.paxos.proposer.TimestampSequence;
 
 class ParliamentTest {
     private Parliament<String> parliament;
@@ -45,7 +46,7 @@ class ParliamentTest {
     void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
-        when(acceptorFactory.makeAllForRound(anyLong())).then(new Answer<List<Acceptor<String>>>() {
+        when(acceptorFactory.createPeersForRound(anyLong())).then(new Answer<List<Acceptor<String>>>() {
 
             @Override
             public List<Acceptor<String>> answer(InvocationOnMock invocation) throws Throwable {

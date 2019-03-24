@@ -1,17 +1,19 @@
 package io.github.parliament;
 
+import java.io.Serializable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import io.github.parliament.files.FileService;
 import io.github.parliament.files.DefaultFileService;
-import io.github.parliament.paxos.Sequence;
+import io.github.parliament.paxos.acceptor.AcceptorFactory;
+import io.github.parliament.paxos.proposer.Sequence;
 import io.github.parliament.persistence.ProposalPersistenceServie;
 import lombok.Builder;
 import lombok.Getter;
 
 @Builder
-public class ParliamentConf<T extends Comparable<T>> {
+public class ParliamentConf<T extends Serializable & Comparable<T>> {
     @Getter
     private AcceptorFactory<T> acceptorManager;
 

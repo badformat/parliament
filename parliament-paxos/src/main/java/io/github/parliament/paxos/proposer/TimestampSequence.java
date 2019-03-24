@@ -1,4 +1,4 @@
-package io.github.parliament.paxos;
+package io.github.parliament.paxos.proposer;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

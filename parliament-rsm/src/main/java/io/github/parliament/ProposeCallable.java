@@ -2,7 +2,7 @@ package io.github.parliament;
 
 import java.util.concurrent.Callable;
 
-import io.github.parliament.paxos.Proposer;
+import io.github.parliament.paxos.proposer.Proposer;
 
 public class ProposeCallable implements Callable<Proposal> {
     private Proposer<?> proposer;
