@@ -1,4 +1,4 @@
-package org.parliament.resp;
+package org.parliament.resp.reader;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -11,22 +11,29 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import org.parliament.resp.RespArray;
+import org.parliament.resp.RespBulkString;
+import org.parliament.resp.RespData;
+import org.parliament.resp.RespError;
+import org.parliament.resp.RespInteger;
+import org.parliament.resp.RespSimpleString;
+
 import com.google.common.base.Preconditions;
 
-public class RespReader {
+public class RespSeekableReader {
     private SeekableByteChannel byteChannel;
     private int postion = 0;
     private ByteBuffer bb;
 
-    public static RespReader with(SeekableByteChannel byteChannel) {
-        return new RespReader(byteChannel, 1024);
+    public static RespSeekableReader with(SeekableByteChannel byteChannel) {
+        return new RespSeekableReader(byteChannel, 1024);
     }
 
-    static RespReader with(SeekableByteChannel byteChannel, int bufferCapacity) {
-        return new RespReader(byteChannel, bufferCapacity);
+    public static RespSeekableReader with(SeekableByteChannel byteChannel, int bufferCapacity) {
+        return new RespSeekableReader(byteChannel, bufferCapacity);
     }
 
-    private RespReader(SeekableByteChannel byteChannel, int bufferCapacity) {
+    private RespSeekableReader(SeekableByteChannel byteChannel, int bufferCapacity) {
         this.byteChannel = byteChannel;
         this.bb = ByteBuffer.allocate(bufferCapacity);
     }

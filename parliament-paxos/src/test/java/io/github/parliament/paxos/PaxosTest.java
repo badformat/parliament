@@ -1,21 +1,17 @@
 package io.github.parliament.paxos;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.concurrent.ExecutionException;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.google.inject.Guice;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 class PaxosTest {
-    private Paxos paxos;
+    private Paxos<String> paxos;
 
     @BeforeEach
     void setUp() throws Exception {
-        paxos = Guice.createInjector(new PaxosTestModule()).getInstance(Paxos.class);
+        paxos = new PaxosSimple();
     }
 
     @AfterEach
@@ -23,9 +19,9 @@ class PaxosTest {
     }
 
     @Test
-    void testPropose() throws InterruptedException, ExecutionException {
+    void testPropose() throws Exception {
         byte[] value = "content".getBytes();
-        assertArrayEquals(value, paxos.propose(1, value).get());
+        assertArrayEquals(value, paxos.propose(1, value).get().getAgreement());
     }
 
 }

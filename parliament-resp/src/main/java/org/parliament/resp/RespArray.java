@@ -3,14 +3,17 @@ package org.parliament.resp;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 import com.google.common.primitives.Bytes;
-
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.val;
 
+@EqualsAndHashCode
+@ToString
 public class RespArray implements RespData {
+    public final static char firstByte = '*';
     @Getter
     @val
     private List<RespData> datas;
@@ -41,34 +44,17 @@ public class RespArray implements RespData {
 
     @Override
     public byte[] toBytes() {
-        byte[] bytes = ("*" + datas.size() + "\r\n").getBytes();
+        StringBuilder sb = new StringBuilder();
+        sb.append(firstByte);
+        sb.append(datas.size());
+        sb.append("\r\n");
+
+        byte[] bytes = sb.toString().getBytes();
+
         for (RespData data : datas) {
             bytes = Bytes.concat(bytes, data.toBytes());
         }
 
         return bytes;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(datas);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (!(obj instanceof RespArray))
-            return false;
-        RespArray other = (RespArray) obj;
-        return Objects.equals(datas, other.datas);
-    }
-
-    @Override
-    public String toString() {
-        final int maxLen = 20;
-        return "RespArray [" + (datas != null ? "datas=" + datas.subList(0, Math.min(datas.size(), maxLen)) : "") + "]";
     }
 }

@@ -1,10 +1,13 @@
 package io.github.parliament.files;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
@@ -18,7 +21,7 @@ public class DefaultFileService implements FileService {
     }
 
     @Override
-    public void createFile(Path file) throws Exception {
+    public void createFileIfNotExists(Path file) throws Exception {
         if (!Files.exists(file)) {
             Files.createFile(file);
         }
@@ -33,7 +36,9 @@ public class DefaultFileService implements FileService {
     public void writeAll(Path file, ByteBuffer content) throws Exception {
         try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.WRITE,
                 StandardOpenOption.DSYNC, StandardOpenOption.CREATE_NEW)) {
-            channel.write(content);
+            while (content.hasRemaining()) {
+                channel.write(content);
+            }
         }
     }
 
@@ -41,7 +46,9 @@ public class DefaultFileService implements FileService {
     public void overwriteAll(Path file, ByteBuffer content) throws Exception {
         try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.WRITE,
                 StandardOpenOption.DSYNC)) {
-            channel.write(content);
+            while (content.hasRemaining()) {
+                channel.write(content);
+            }
         }
     }
 
@@ -58,6 +65,25 @@ public class DefaultFileService implements FileService {
     @Override
     public SeekableByteChannel newReadOnlySeekableByteChannel(Path file) throws IOException {
         return Files.newByteChannel(file, StandardOpenOption.READ);
+    }
+
+    @Override
+    public FileOutputStream newOutputstream(Path roundFile) throws IOException {
+        return new FileOutputStream(roundFile.toFile());
+    }
+
+    @Override
+    public FileInputStream newInputStream(Path file) throws IOException {
+        return new FileInputStream(file.toFile());
+    }
+
+    @Override
+    public void delete(Path roundFile) throws IOException {
+        try {
+            Files.delete(roundFile);
+        } catch (NoSuchFileException e) {
+            // TODO log
+        }
     }
 
 }

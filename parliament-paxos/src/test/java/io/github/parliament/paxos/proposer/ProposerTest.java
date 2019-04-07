@@ -15,27 +15,25 @@ import org.mockito.MockitoAnnotations;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.Prepare;
-import io.github.parliament.paxos.proposer.Proposer;
-import io.github.parliament.paxos.proposer.Sequence;
 
 class ProposerTest {
-    private Proposer<String> proposer;
+    private Proposer<String>       proposer;
     private List<Acceptor<String>> acceptors = new ArrayList<Acceptor<String>>();
     @Mock
-    private Sequence<String> seqNoGenerator;
+    private Sequence<String>       seqNoGenerator;
     @Mock
-    private Acceptor<String> acc1;
+    private Acceptor<String>       acc1;
     @Mock
-    private Acceptor<String> acc2;
+    private Acceptor<String>       acc2;
     @Mock
-    private Acceptor<String> acc3;
+    private Acceptor<String>       acc3;
     @Mock
-    private Acceptor<String> acc4;
+    private Acceptor<String>       acc4;
     @Mock
-    private Acceptor<String> acc5;
+    private Acceptor<String>       acc5;
 
     private AtomicInteger ai = new AtomicInteger();
-    private byte[] proposal;
+    private byte[]        proposal;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -66,8 +64,8 @@ class ProposerTest {
     }
 
     @Test
-    void propose() {
-        acceptors.forEach((acc) -> {
+    void propose() throws Exception {
+        for (Acceptor<String> acc : acceptors) {
             when(acc.prepare(anyString())).thenAnswer((ctx) -> {
                 String n = ctx.getArgument(0);
                 return Prepare.ok(n, n, proposal);
@@ -77,7 +75,7 @@ class ProposerTest {
                 String n = ctx.getArgument(0);
                 return Accept.ok(n);
             });
-        });
+        }
 
         proposer.propose();
         for (Acceptor<String> acceptor : acceptors) {
@@ -87,7 +85,7 @@ class ProposerTest {
     }
 
     @Test
-    void prepareRejectedByMajority() {
+    void prepareRejectedByMajority() throws Exception {
         String n = seqNoGenerator.next();
 
         Prepare<String> rejectPrepare = Prepare.reject(n);
@@ -106,7 +104,7 @@ class ProposerTest {
     }
 
     @Test
-    void prepareRejectedBySomeone() {
+    void prepareRejectedBySomeone() throws Exception {
         String n = seqNoGenerator.next();
 
         Prepare<String> rejectPrepare = Prepare.reject(n);
@@ -125,7 +123,7 @@ class ProposerTest {
     }
 
     @Test
-    void prepareReturnedWithAcceptedValue() {
+    void prepareReturnedWithAcceptedValue() throws Exception {
         String n = seqNoGenerator.next();
         Prepare<String> rejectPrepare = Prepare.reject(n);
 
@@ -147,7 +145,7 @@ class ProposerTest {
     }
 
     @Test
-    void acceptRejectedByMajority() {
+    void acceptRejectedByMajority() throws Exception {
         String n = seqNoGenerator.next();
         Accept<String> rejectAccept = Accept.reject(n);
         when(acc1.accept(anyString(), any())).thenReturn(rejectAccept);
@@ -164,7 +162,7 @@ class ProposerTest {
     }
 
     @Test
-    void acceptRejectedBySomeone() {
+    void acceptRejectedBySomeone() throws Exception {
         String n = seqNoGenerator.next();
         Accept<String> rejectAccept = Accept.reject(n);
         when(acc1.accept(anyString(), any())).thenReturn(rejectAccept);

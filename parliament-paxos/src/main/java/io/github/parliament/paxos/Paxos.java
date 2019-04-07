@@ -1,31 +1,48 @@
 package io.github.parliament.paxos;
 
-import java.util.concurrent.Callable;
+import java.util.Collection;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
-import com.google.inject.Inject;
-
+import com.google.common.collect.MapMaker;
+import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.proposer.Proposer;
-import io.github.parliament.paxos.proposer.ProposerFactory;
+import io.github.parliament.paxos.proposer.Sequence;
+import lombok.Getter;
 
-public class Paxos {
-    @Inject
-    private ProposerFactory<?> proposerFactory;
-    @Inject
-    private ExecutorService executorService;
+public abstract class Paxos<T extends Comparable<T>> {
+    private final ConcurrentMap<Integer, Proposer<T>> proposers = new MapMaker()
+            .weakValues()
+            .makeMap();
 
-    public void shutdown() {
+    @Getter
+    protected ExecutorService executorService;
+
+    @Getter
+    protected Sequence<T> sequence;
+
+    public void shutdown() throws Exception {
         executorService.shutdown();
     }
 
-    public Future<byte[]> propose(int round, byte[] value) {
-        Proposer<?> proposer = proposerFactory.createProposerForRound(round, value);
-        return executorService.submit(new Callable<byte[]>() {
-            @Override
-            public byte[] call() throws Exception {
-                return proposer.propose();
+    public Future<Proposal> propose(int round, byte[] value) throws Exception {
+        Proposer proposer = null;
+
+        synchronized (proposers) {
+            if (proposers.containsKey(round)) {
+                proposer = proposers.get(round);
+            } else {
+                proposers.putIfAbsent(round, new Proposer<T>(getAcceptors(round), sequence, value));
+                proposer = proposers.get(round);
             }
+        }
+        Proposer finalProposer = proposer;
+        return executorService.submit(() -> {
+            byte[] agreement = finalProposer.propose();
+            return Proposal.builder().agreement(agreement).round(round).build();
         });
     }
+
+    protected abstract Collection<Acceptor<T>> getAcceptors(int round) throws Exception;
 }

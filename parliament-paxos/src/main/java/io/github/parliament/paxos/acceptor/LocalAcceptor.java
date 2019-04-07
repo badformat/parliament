@@ -1,22 +1,24 @@
 package io.github.parliament.paxos.acceptor;
 
+import java.io.Serializable;
+
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 
 @EqualsAndHashCode
 @ToString
-public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
+public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T>, Serializable {
     @Getter
-    private T np;
+    private             T      np;
     @Getter
-    private T na;
+    private             T      na;
     @Getter
-    private byte[] va;
+    private             byte[] va;
 
     @Override
     public Prepare<T> prepare(T n) {
-        if (np == null || n.compareTo(np) > 0) {
+        if (np == null || n.compareTo(np) >= 0) {
             np = n;
             return Prepare.<T>ok(n, na, va);
         }
@@ -25,7 +27,10 @@ public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor
 
     @Override
     public Accept<T> accept(T n, byte[] value) {
-        if (np == null || n.compareTo(np) >= 0) {
+        if (np == null) {
+            return Accept.<T>reject(n);
+        }
+        if (n.compareTo(np) >= 0) {
             np = n;
             na = n;
             va = value;
@@ -35,5 +40,5 @@ public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor
     }
 
     @Override
-    abstract public void decided(byte[] agreement);
+    abstract public void decide(byte[] agreement) throws Exception;
 }

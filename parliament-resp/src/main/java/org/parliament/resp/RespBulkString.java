@@ -1,18 +1,26 @@
 package org.parliament.resp;
 
-import java.util.Arrays;
-import java.util.Objects;
-
 import com.google.common.primitives.Bytes;
-
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
+import lombok.Value;
 
+@EqualsAndHashCode
+@ToString
+@Value
 public class RespBulkString implements RespData {
+    public static final char firstByte = '$';
+
+    private final static RespBulkString NULL = new RespBulkString(null);
     @Getter
-    private int length = 0;
+    private              int            length;
     @Getter
-    private byte[] content;
-    private byte firstByte = '$';
+    private              byte[]         content;
+
+    public static RespBulkString with(byte[] content) {
+        return new RespBulkString(content);
+    }
 
     public RespBulkString(byte[] content) {
         this.content = content;
@@ -23,46 +31,21 @@ public class RespBulkString implements RespData {
         }
     }
 
+    public static RespBulkString nullBulkString() {
+        return NULL;
+    }
+
     @Override
     public byte[] toBytes() {
-        byte[] bytes = { firstByte };
+        StringBuilder sb = new StringBuilder();
+        sb.append(firstByte);
+        sb.append(length);
+        sb.append("\r\n");
+        byte[] bytes = sb.toString().getBytes();
 
-        bytes = Bytes.concat(bytes, String.valueOf(length).getBytes(), "\r\n".getBytes());
         if (this.content != null) {
             bytes = Bytes.concat(bytes, content, "\r\n".getBytes());
         }
         return bytes;
     }
-
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + Arrays.hashCode(content);
-        result = prime * result + Objects.hash(firstByte, length);
-        return result;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (!(obj instanceof RespBulkString))
-            return false;
-        RespBulkString other = (RespBulkString) obj;
-        return Arrays.equals(content, other.content) && firstByte == other.firstByte && length == other.length;
-    }
-
-    @Override
-    public String toString() {
-        final int maxLen = 20;
-        return "BulkString [length=" + length + ", "
-                + (content != null
-                        ? "content=" + Arrays.toString(Arrays.copyOf(content, Math.min(content.length, maxLen))) + ", "
-                        : "")
-                + "firstByte=" + firstByte + "]";
-    }
-
 }

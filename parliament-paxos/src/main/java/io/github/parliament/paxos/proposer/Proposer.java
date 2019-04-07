@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.google.common.base.Preconditions;
 
@@ -14,37 +15,59 @@ import io.github.parliament.paxos.acceptor.Prepare;
 /**
  *
  * @author zy
- * @version $Id: Proposer.java, v 0.1 2019年03月08日 3:17 PM zy Exp $
  */
 public class Proposer<T extends Comparable<T>> {
     private Collection<Acceptor<T>> acceptors;
-    private int majority = Integer.MAX_VALUE;
-    private Sequence<T> sequence;
-    private boolean decided = false;
-    private T n;
-    private T max;
-    private byte[] agreement;
+    private int                     majority = Integer.MAX_VALUE;
+    private Sequence<T>             sequence;
+    private boolean                 decided  = false;
+    private T                       n;
+    private byte[]                  agreement;
 
     public Proposer(Collection<Acceptor<T>> acceptors, Sequence<T> sequence, byte[] proposal) {
+        Preconditions.checkArgument(proposal != null);
         this.acceptors = acceptors;
         this.majority = calcMajority(acceptors.size());
         this.sequence = sequence;
         this.agreement = proposal;
     }
 
-    public byte[] propose() {
+    public byte[] propose() throws InterruptedException {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+
+        int retried = 0;
         while (!decided) {
             n = sequence.next();
             if (prepare()) {
                 decided = accept();
             }
+            retried++;
+            Thread.sleep(Math.abs(random.nextInt()) % 100);
+            if (retried > 10) {
+                // TODO
+                throw new IllegalStateException();
+            }
         }
 
+        int decideCnt = 0;
+        Preconditions.checkNotNull(agreement);
         for (Acceptor<T> acceptor : acceptors) {
-            acceptor.decided(agreement);
+            try {
+                acceptor.decide(agreement);
+                decideCnt++;
+            } catch (Exception e) {
+                //TODO
+                e.printStackTrace();
+            }
         }
 
-        return agreement;
+        if (decideCnt > getMajority()) {
+            return agreement;
+        } else {
+            //TODO
+            decided = false;
+            throw new IllegalStateException("");
+        }
     }
 
     public boolean isDecided() {
@@ -53,24 +76,43 @@ public class Proposer<T extends Comparable<T>> {
 
     boolean prepare() {
         List<Prepare<T>> prepares = new ArrayList<>();
+        int failedPeers = 0;
 
         for (Acceptor<T> acceptor : acceptors) {
-            Prepare<T> prepare = acceptor.prepare(n);
+            Prepare<T> prepare = null;
+            try {
+                prepare = acceptor.prepare(n);
+            } catch (Exception e) {
+                failedPeers++;
+                //TODO
+                e.printStackTrace();
+                continue;
+            }
+            if (failedPeers >= getMajority()) {
+                //TODO
+                throw new IllegalStateException();
+            }
             checkPrepare(acceptor, prepare);
             prepares.add(prepare);
         }
 
         int ok = 0;
-        max = n;
+        T max = null;
         for (Prepare<T> prepare : prepares) {
             if (!prepare.isOk()) {
                 continue;
             }
             ok++;
             T na = prepare.getNa();
-            if (na != null && na.compareTo(max) > 0) {
-                max = na;
-                agreement = prepare.getVa();
+            if (na != null) {
+                if (max == null) {
+                    max = na;
+                }
+                if (na.compareTo(max) >= 0) {
+                    max = na;
+                    Preconditions.checkNotNull(prepare.getVa());
+                    agreement = prepare.getVa();
+                }
             }
         }
 
@@ -86,8 +128,25 @@ public class Proposer<T extends Comparable<T>> {
 
     boolean accept() {
         int ok = 0;
+        int failedPeers = 0;
+        Preconditions.checkNotNull(agreement);
+
         for (Acceptor<T> acceptor : acceptors) {
-            Accept<T> accept = acceptor.accept(n, agreement);
+            Accept<T> accept = null;
+            try {
+                accept = acceptor.accept(n, agreement);
+            } catch (Exception e) {
+                //TODO
+                failedPeers++;
+                e.printStackTrace();
+                continue;
+            }
+
+            if (failedPeers >= getMajority()) {
+                //TODO
+                throw new IllegalStateException();
+            }
+
             checkAccept(acceptor, accept);
             if (accept.isOk()) {
                 ok++;

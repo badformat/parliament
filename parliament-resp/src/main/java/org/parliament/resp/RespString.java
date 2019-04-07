@@ -5,13 +5,17 @@ import java.util.Objects;
 
 import com.google.common.base.Preconditions;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 
+@EqualsAndHashCode
+@ToString
 class RespString implements RespData {
     @Getter
-    private char firstByte;
+    private char    firstByte;
     @Getter
-    private String content;
+    private String  content;
     @Getter
     private Charset charset;
 
@@ -25,31 +29,6 @@ class RespString implements RespData {
 
     @Override
     public byte[] toBytes() {
-        return (firstByte + content + "\r\n").getBytes();
+        return ((char) firstByte + content + "\r\n").getBytes(charset);
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(charset, content, firstByte);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (!(obj instanceof RespString))
-            return false;
-        RespString other = (RespString) obj;
-        return Objects.equals(charset, other.charset) && Objects.equals(content, other.content)
-                && firstByte == other.firstByte;
-    }
-
-    @Override
-    public String toString() {
-        return "RespString [firstByte=" + firstByte + ", " + (content != null ? "content=" + content + ", " : "")
-                + (charset != null ? "charset=" + charset : "") + "]";
-    }
-
 }

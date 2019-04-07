@@ -57,5 +57,5 @@ response: paxos round prepare_res ok:boolean n:byte[] na:byte[] va:byte[]
 request: paxos round accept n:byte[] value:byte[]
 response: paxos round accept_res ok:boolean n:byte[]
 
-request: paxos round decided value:bytes[]
+request: paxos round decide value:bytes[]
 response: paxos round decided_res ok:boolean // TODO optional

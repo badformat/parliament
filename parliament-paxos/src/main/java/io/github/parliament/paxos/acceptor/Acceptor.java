@@ -7,15 +7,9 @@ package io.github.parliament.paxos.acceptor;
  * @param <T> 可比较类型
  */
 public interface Acceptor<T extends Comparable<T>> {
-    Prepare<T> prepare(T n);
+    Prepare<T> prepare(T n) throws Exception;
 
-    Accept<T> accept(T n, byte[] value);
+    Accept<T> accept(T n, byte[] value) throws Exception;
 
-    void decided(byte[] agreement);
-
-    T getNp();
-
-    T getNa();
-
-    byte[] getVa();
+    void decide(byte[] agreement) throws Exception;
 }

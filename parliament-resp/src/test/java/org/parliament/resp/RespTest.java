@@ -16,12 +16,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.parliament.resp.reader.RespSeekableReader;
 
 import com.google.common.primitives.Bytes;
 
 class RespTest {
     private RespWriter respWriter;
-    private RespReader respReader;
+    private RespSeekableReader respReader;
     private Path path = Paths.get("./resp_file");
     private SeekableByteChannel writeByteChannel;
     private SeekableByteChannel readByteChannel;
@@ -39,7 +40,7 @@ class RespTest {
         respWriter = RespWriter.with(writeByteChannel);
 
         readByteChannel = Files.newByteChannel(path);
-        respReader = RespReader.with(readByteChannel, capacity);
+        respReader = RespSeekableReader.with(readByteChannel, capacity);
         capacity += capacity * 10;
     }
 
@@ -172,7 +173,7 @@ class RespTest {
 
     @Test
     void readIntegerAndBulkString() throws Exception {
-        RespInteger round = new RespInteger(1);
+        RespInteger round = RespInteger.with(1);
         byte[] content = "内容".getBytes();
         RespBulkString bulk = new RespBulkString(content);
 
