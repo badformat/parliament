@@ -1,6 +1,6 @@
-*/target
-*/.checkstyle
-*/.classpath
+**/target
+**/.checkstyle
+**/.classpath
 **/.settings
 **/.project
 
