@@ -1,4 +1,4 @@
-package io.github.parliament.network;
+package io.github.parliament.server;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -28,12 +28,15 @@ public class PaxosSyncServer implements Runnable {
     private          Thread                  selectorThread;
     private          ExecutorService         executorService;
     private volatile AcceptorFactory<String> acceptorFactory;
+    private volatile ProposalService         proposalService;
 
     @Builder
-    public PaxosSyncServer(InetSocketAddress me, AcceptorFactory<String> acceptorFactory, ExecutorService executorService) {
+    public PaxosSyncServer(InetSocketAddress me, AcceptorFactory<String> acceptorFactory, ProposalService proposalService,
+                           ExecutorService executorService) {
         this.me = me;
         this.acceptorFactory = acceptorFactory;
         this.executorService = executorService;
+        this.proposalService = proposalService;
     }
 
     public void start() throws IOException {
@@ -65,7 +68,7 @@ public class PaxosSyncServer implements Runnable {
         try {
             while (status != Status.stopped) {
                 SocketChannel cc = ssc.accept();
-                RemotePeerHandler h = new RemotePeerHandler(cc, acceptorFactory);
+                RemotePeerHandler h = new RemotePeerHandler(cc, acceptorFactory, proposalService);
                 executorService.submit(h);
             }
         } catch (IOException e) {

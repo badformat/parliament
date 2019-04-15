@@ -1,5 +1,7 @@
 package io.github.parliament.paxos;
 
+import java.io.Serializable;
+
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -12,9 +14,10 @@ import lombok.ToString;
 @Builder
 @ToString
 @EqualsAndHashCode
-public class Proposal {
+public class Proposal implements Serializable {
+    static final long   serialVersionUID = 42L;
     @Getter
-    private int    round;
+    private      int    round;
     @Getter
-    private byte[] agreement;
+    private      byte[] agreement;
 }

@@ -8,8 +8,8 @@ public class TimestampSequence implements Sequence<String> {
     @Override
     public String next() {
         long m = System.currentTimeMillis();
-        String p = String.format("%05d", atomicIngeger.getAndIncrement() % 10000);
-        return String.valueOf(m) + p;
+        String p = String.format("%04d", atomicIngeger.getAndIncrement() % 10000);
+        return m + p;
     }
 
 }

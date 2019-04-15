@@ -6,14 +6,13 @@ import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
@@ -26,11 +25,11 @@ import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.AcceptorFactory;
 import io.github.parliament.paxos.acceptor.Prepare;
-import io.github.parliament.paxos.learner.Learner;
 import io.github.parliament.paxos.proposer.TimestampSequence;
-import io.github.parliament.rsm.StateMachineEvent.Status;
-import io.github.parliament.network.PaxosSyncServer;
-import io.github.parliament.network.RemoteAcceptorSyncProxy;
+import io.github.parliament.server.InetLearner;
+import io.github.parliament.server.PaxosSyncServer;
+import io.github.parliament.server.RemoteAcceptorSyncProxy;
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -41,16 +40,17 @@ import lombok.Getter;
 public class PaxosReplicateStateMachine extends Paxos<String> implements AcceptorFactory<String> {
     static private final RejectAcceptor                                            rejectAcceptor        = new RejectAcceptor();
     @Getter
-    private              RoundPersistenceService                                   roundPersistenceService;
+    private              ProposalPersistenceService                                proposalPersistenceService;
     @Getter
     private volatile     InetSocketAddress                                         me;
-    private volatile     List<InetSocketAddress>                                   peers;
+    private volatile     List<InetSocketAddress>                                   others;
     private volatile     ConcurrentMap<InetSocketAddress, RemoteAcceptorSyncProxy> remoteAcceptorProxies = new MapMaker()
             .makeMap();
     private volatile     boolean                                                   joined                = true;
 
     private volatile LoadingCache<Integer, RoundLocalAcceptor> acceptors;
-    private          Learner                                   learner;
+    @Getter(AccessLevel.PACKAGE)
+    private          InetLearner                               learner;
 
     private static class RejectAcceptor implements Acceptor<String> {
 
@@ -76,49 +76,43 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
     public PaxosReplicateStateMachine(List<InetSocketAddress> peers,
                                       InetSocketAddress me,
                                       ExecutorService executorService,
-                                      RoundPersistenceService roundPersistenceService
+                                      ProposalPersistenceService proposalPersistenceService
     ) {
-        this.peers = peers;
+        others = new ArrayList<>(peers);
+        others.remove(me);
         this.me = me;
         this.executorService = executorService;
-        this.roundPersistenceService = roundPersistenceService;
+        this.proposalPersistenceService = proposalPersistenceService;
         this.sequence = new TimestampSequence();
         this.acceptors = CacheBuilder.newBuilder()
                 .maximumSize(100000)
                 .expireAfterWrite(10, TimeUnit.MINUTES)
-                .build(
-                        new CacheLoader<Integer, RoundLocalAcceptor>() {
-                            public RoundLocalAcceptor load(Integer round) throws Exception {
-                                Optional<RoundLocalAcceptor> acc = roundPersistenceService.getAcceptorFor(round);
-                                return acc.orElseGet(() -> RoundLocalAcceptor
-                                        .builder()
-                                        .round(round)
-                                        .reachedAgreement(roundPersistenceService)
-                                        .build());
-                            }
-                        });
+                .build(new CacheLoader<Integer, RoundLocalAcceptor>() {
+                    public RoundLocalAcceptor load(Integer round) throws Exception {
+                        Optional<Proposal> proposal = proposalPersistenceService.getProposal(round);
+                        RoundLocalAcceptor acceptor = RoundLocalAcceptor.builder().round(round).proposalService(
+                                proposalPersistenceService).build();
+                        if (proposal.isPresent()) {
+                            String n = sequence.next();
+                            acceptor.prepare(n);
+                            acceptor.accept(n, proposal.get().getAgreement());
+                        }
+                        return acceptor;
+                    }
+                });
         this.server = PaxosSyncServer.builder()
                 .acceptorFactory(this)
                 .executorService(executorService)
+                .proposalService(proposalPersistenceService)
                 .me(me)
                 .build();
+
+        this.learner = InetLearner.builder().others(others).proposalService(proposalPersistenceService).build();
     }
 
     public void start() throws Exception {
         this.server.start();
-        this.sync();
-    }
-
-    void sync() throws Exception {
-        int max = learner.max();
-        int localMax = maxRound();
-        if (localMax < max) {
-            Stream<Proposal> rounds = learner.learn(localMax + 1, max);
-            rounds.forEach(p -> {
-                //TODO RoundLocalAcceptor acceptor = new RoundLocalAcceptor();
-                //TODO this.roundPersistenceService.saveAcceptor(acceptor);
-            });
-        }
+        //TODO this.pull();
     }
 
     public void shutdown() throws Exception {
@@ -126,42 +120,43 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
         this.server.shutdown();
     }
 
+    Future<Boolean> pull() throws Exception {
+        int begin = maxRound();
+        return executorService.submit(() -> learner.pullAll(begin));
+    }
+
+    public Future<Boolean> pull(int round) {
+        return executorService.submit(() -> learner.pull(round));
+    }
+
     public int nextRound() throws Exception {
-        return roundPersistenceService.nextRound();
+        return proposalPersistenceService.nextRound();
     }
 
     public int minRound() throws Exception {
-        return roundPersistenceService.minRound();
+        return proposalPersistenceService.minRound();
     }
 
-    public synchronized void forgetRoundsTo(int no) throws Exception {
-        roundPersistenceService.forgetRoundsTo(no);
-        roundPersistenceService.setMin(no);
+    public void forget(int round) throws Exception {
+        int max = Math.min(round, proposalPersistenceService.maxRound());
+        synchronized (this) {
+            int safe = learner.learnMax().stream().reduce(Integer.MAX_VALUE, (a, b) -> a > b ? b : a);
+            proposalPersistenceService.forget(Math.min(max, safe));
+        }
     }
 
     public int maxRound() throws Exception {
-        return roundPersistenceService.maxRound();
+        return proposalPersistenceService.maxRound();
     }
 
-    public StateMachineEvent event(int round) throws Exception {
-        if (round < roundPersistenceService.minRound()) {
-            return StateMachineEvent.deleted;
-        }
-
-        Optional<RoundLocalAcceptor> acceptor = roundPersistenceService.getAcceptorFor(round);
-        if (!acceptor.isPresent()) {
-            return StateMachineEvent.unknown;
-        }
-        return StateMachineEvent.builder().agreement(acceptor.get().getVa()).round(round).status(Status.decided).build();
+    public Optional<Proposal> proposal(int round) throws Exception {
+        return proposalPersistenceService.getProposal(round);
     }
 
     @Override
     synchronized protected Collection<Acceptor<String>> getAcceptors(int round) {
         List<Acceptor<String>> acceptors = new ArrayList<>();
-        for (InetSocketAddress peer : peers) {
-            if (Objects.equals(peer, me)) {
-                continue;
-            }
+        for (InetSocketAddress peer : others) {
             RemoteAcceptorSyncProxy acceptor = remoteAcceptorProxies.get(peer);
 
             if (acceptor != null) {
@@ -202,7 +197,7 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
                 }).collect(Collectors.toList()));
 
         acceptors.add(createLocalAcceptorFor(round));
-        Preconditions.checkState(acceptors.size() == peers.size());
+        Preconditions.checkState(acceptors.size() == others.size() + 1);
         return acceptors;
     }
 

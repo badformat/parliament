@@ -18,7 +18,6 @@ import java.util.concurrent.Future;
 import io.github.parliament.files.DefaultFileService;
 import io.github.parliament.paxos.Proposal;
 import io.github.parliament.paxos.acceptor.Acceptor;
-import io.github.parliament.rsm.StateMachineEvent.Status;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,7 +42,7 @@ class PaxosRsmConsensusTest {
         }
 
         for (InetSocketAddress me : peers) {
-            RoundPersistenceService roundService = RoundPersistenceService
+            ProposalPersistenceService proposalService = ProposalPersistenceService
                     .builder()
                     .fileService(new DefaultFileService())
                     .path(Paths.get("./test", "" + me.getPort()))
@@ -52,7 +51,7 @@ class PaxosRsmConsensusTest {
                     .me(me)
                     .peers(peers)
                     .executorService(executorService)
-                    .roundPersistenceService(roundService)
+                    .proposalPersistenceService(proposalService)
                     .build();
             machines.add(machine);
         }
@@ -71,7 +70,7 @@ class PaxosRsmConsensusTest {
         }
         for (PaxosReplicateStateMachine machine : machines) {
             machine.shutdown();
-            Files.walk(machine.getRoundPersistenceService().getDataPath())
+            Files.walk(machine.getProposalPersistenceService().getDataPath())
                     .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
                     .forEach(File::delete);
@@ -104,10 +103,10 @@ class PaxosRsmConsensusTest {
         for (Future<Proposal> f : futures) {
             Proposal proposal = f.get();
             for (PaxosReplicateStateMachine machine : machines) {
-                while (machine.event(proposal.getRound()).getStatus() == Status.unknown) {
+                while (!machine.proposal(proposal.getRound()).isPresent()) {
                     Thread.sleep(100);
                 }
-                StateMachineEvent mine = machine.event(proposal.getRound());
+                Proposal mine = machine.proposal(proposal.getRound()).get();
                 assertArrayEquals(proposal.getAgreement(), mine.getAgreement(), "proposal is " + proposal + ",this machine is " + mine
                 );
             }
@@ -133,7 +132,7 @@ class PaxosRsmConsensusTest {
         for (Future<Proposal> f : futures) {
             Proposal proposal = f.get();
             for (PaxosReplicateStateMachine machine : machines) {
-                if (machine.event(proposal.getRound()).getStatus() == Status.unknown) {
+                if (!machine.proposal(proposal.getRound()).isPresent()) {
                     Thread.sleep(100);
                 }
             }
@@ -142,7 +141,7 @@ class PaxosRsmConsensusTest {
         for (Future<Proposal> f : futures) {
             Proposal proposal = f.get();
             for (PaxosReplicateStateMachine machine : machines) {
-                assertArrayEquals(proposal.getAgreement(), machine.event(proposal.getRound()).getAgreement());
+                assertArrayEquals(proposal.getAgreement(), machine.proposal(proposal.getRound()).get().getAgreement());
             }
         }
     }

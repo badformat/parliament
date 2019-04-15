@@ -1,14 +1,16 @@
-package io.github.parliament.network;
+package io.github.parliament.server;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.Optional;
 
+import io.github.parliament.server.ServerCodec.Request;
+import io.github.parliament.paxos.Proposal;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.AcceptorFactory;
 import io.github.parliament.paxos.acceptor.Prepare;
-import io.github.parliament.network.AcceptorRequestDeserializer.AcceptorRequest;
 import lombok.Getter;
 
 /**
@@ -22,41 +24,64 @@ public class RemotePeerHandler extends Thread {
     private volatile boolean       dead = false;
 
     private volatile AcceptorFactory<String> acceptorFactory;
+    private          ProposalService         proposalService;
 
-    private AcceptorRequestDeserializer deserializer = new AcceptorRequestDeserializer();
-    private AcceptorResponseSerializer  serializer   = new AcceptorResponseSerializer();
+    private ServerCodec codec = new ServerCodec();
 
-    RemotePeerHandler(SocketChannel clientChannel, AcceptorFactory<String> acceptorFactory) {
+    RemotePeerHandler(SocketChannel clientChannel, AcceptorFactory<String> acceptorFactory, ProposalService proposalService) {
         this.clientChannel = clientChannel;
         this.acceptorFactory = acceptorFactory;
+        this.proposalService = proposalService;
     }
 
     @Override
     public void run() {
         do {
             try {
-                AcceptorRequest req = deserializer.deserializeRequest(clientChannel);
+                Request req = codec.decode(clientChannel);
                 ByteBuffer src;
                 Acceptor<String> acceptor = acceptorFactory.createLocalAcceptorFor(
                         req.getRound());
                 switch (req.getCmd()) {
                     case prepare:
                         Prepare<String> resp = acceptor.prepare(req.getN());
-                        src = serializer.serializerPrepareResponse(resp);
+                        src = codec.encodePrepare(resp);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
                         break;
                     case accept:
-                        Accept<String> accresp = acceptor.accept(req.getN(), req.getV());
-                        src = serializer.serializerAcceptResponse(accresp);
+                        Accept<String> acc = acceptor.accept(req.getN(), req.getV());
+                        src = codec.encodeAccept(acc);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
                         break;
                     case decide:
                         acceptor.decide(req.getV());
-                        src = serializer.serializerDecideResponse();
+                        src = codec.encodeDecide();
+                        while (src.hasRemaining()) {
+                            clientChannel.write(src);
+                        }
+                        break;
+                    case max:
+                        int max = proposalService.maxRound();
+                        src = codec.encodeInt(max);
+                        while (src.hasRemaining()) {
+                            clientChannel.write(src);
+                        }
+                        break;
+                    case min:
+                        int min = proposalService.minRound();
+                        src = codec.encodeInt(min);
+                        while (src.hasRemaining()) {
+                            clientChannel.write(src);
+                        }
+                        break;
+                    case pull:
+                        int rn = req.getRound();
+                        Optional<Proposal> p = proposalService.getProposal(rn);
+                        src = codec.encodeProposal(p);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
@@ -73,7 +98,7 @@ public class RemotePeerHandler extends Thread {
                 dead = true;
                 e.printStackTrace();
                 try {
-                    ByteBuffer src = serializer.serializeErrorResponse("Exception：" + e.getMessage());
+                    ByteBuffer src = codec.encodeError("Exception：" + e.getMessage());
                     while (src.hasRemaining()) {
                         clientChannel.write(src);
                     }

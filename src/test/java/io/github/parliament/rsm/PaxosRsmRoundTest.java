@@ -7,22 +7,22 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import io.github.parliament.files.DefaultFileService;
 import io.github.parliament.paxos.Proposal;
-import io.github.parliament.rsm.StateMachineEvent.Status;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PaxosRsmRoundTest {
     private List<PaxosReplicateStateMachine> machines = new ArrayList<>();
@@ -40,7 +40,7 @@ class PaxosRsmRoundTest {
         }
 
         for (InetSocketAddress me : peers) {
-            RoundPersistenceService roundService = RoundPersistenceService
+            ProposalPersistenceService proposalService = ProposalPersistenceService
                     .builder()
                     .fileService(new DefaultFileService())
                     .path(Paths.get("./test", "" + me.getPort()))
@@ -50,7 +50,7 @@ class PaxosRsmRoundTest {
                     .me(me)
                     .peers(peers)
                     .executorService(executorService)
-                    .roundPersistenceService(roundService)
+                    .proposalPersistenceService(proposalService)
                     .build();
             machines.add(machine);
         }
@@ -64,7 +64,7 @@ class PaxosRsmRoundTest {
             peer.shutdown();
         }
         for (PaxosReplicateStateMachine machine : machines) {
-            Files.walk(machine.getRoundPersistenceService().getDataPath())
+            Files.walk(machine.getProposalPersistenceService().getDataPath())
                     .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
                     .forEach(File::delete);
@@ -81,9 +81,10 @@ class PaxosRsmRoundTest {
         byte[] p = localMachine.propose(r, "proposal".getBytes()).get().getAgreement();
 
         for (PaxosReplicateStateMachine machine : machines) {
-            assertEquals(r, machine.event(r).getRound());
-            assertEquals(Status.decided, machine.event(r).getStatus());
-            assertArrayEquals(p, machine.event(r).getAgreement());
+            Optional<Proposal> proposal = machine.proposal(r);
+            assertTrue(proposal.isPresent());
+            assertEquals(r, proposal.get().getRound());
+            assertArrayEquals(p, proposal.get().getAgreement());
         }
     }
 
@@ -101,7 +102,7 @@ class PaxosRsmRoundTest {
     @Test
     void unknownEvent() throws Exception {
         int r = localMachine.nextRound();
-        assertEquals(Status.unknown, localMachine.event(r).getStatus());
+        assertFalse(localMachine.proposal(r).isPresent());
     }
 
     @Test
@@ -118,7 +119,7 @@ class PaxosRsmRoundTest {
             int r = localMachine.nextRound();
             localMachine.propose(r, ("proposal of round " + r).getBytes()).get();
         }
-        localMachine.forgetRoundsTo(5);
+        localMachine.forget(5);
         assertEquals(5, localMachine.minRound());
     }
 
@@ -135,8 +136,8 @@ class PaxosRsmRoundTest {
     }
 
     @Test
-    void learn() throws Exception {
-        List<PaxosReplicateStateMachine> actives = machines.subList(0, machines.size() - 2);
+    void learnMax() throws Exception {
+        List<PaxosReplicateStateMachine> actives = machines.subList(0, machines.size() - 1);
         PaxosReplicateStateMachine defer = machines.get(machines.size() - 1);
         for (PaxosReplicateStateMachine machine : actives) {
             machine.start();
@@ -148,17 +149,60 @@ class PaxosRsmRoundTest {
             proposals.add(localMachine.propose(r, ("proposal of round " + r).getBytes()));
         }
 
-        Map<Integer, Proposal> events = new HashMap<>();
         for (Future<Proposal> proposal : proposals) {
-            events.put(proposal.get().getRound(), proposal.get());
+            proposal.get();
         }
 
-        defer.start();
-        defer.sync();
-
-        for (int round : events.keySet()) {
-            StateMachineEvent event = defer.event(round);
-            assertArrayEquals(events.get(round).getAgreement(), event.getAgreement());
+        for (int max : defer.getLearner().learnMax()) {
+            assertEquals(localMachine.maxRound(), max);
         }
+        for (int min : defer.getLearner().learnMin()) {
+            assertEquals(localMachine.minRound(), min);
+        }
+    }
+
+    @Test
+    void learn() throws Exception {
+        List<PaxosReplicateStateMachine> actives = machines.subList(0, machines.size() - 1);
+        PaxosReplicateStateMachine defer = machines.get(machines.size() - 1);
+        for (PaxosReplicateStateMachine machine : actives) {
+            machine.start();
+        }
+
+        List<Future<Proposal>> proposals = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            int r = localMachine.nextRound();
+            proposals.add(localMachine.propose(r, ("proposal of round " + r).getBytes()));
+        }
+
+        for (Future<Proposal> proposal : proposals) {
+            proposal.get();
+        }
+
+        defer.pull().get();
+
+        assertEquals(localMachine.maxRound(), defer.maxRound());
+    }
+
+    @Test
+    void forget() throws Exception {
+        for (PaxosReplicateStateMachine machine : machines) {
+            machine.start();
+        }
+
+        List<Future<Proposal>> proposals = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            int r = localMachine.nextRound();
+            proposals.add(localMachine.propose(r, ("proposal of round " + i).getBytes()));
+        }
+
+        for (Future<Proposal> proposal : proposals) {
+            proposal.get();
+        }
+
+        localMachine.forget(9);
+        assertEquals(9, localMachine.minRound());
+        assertTrue(localMachine.proposal(9).isPresent());
+        assertArrayEquals("proposal of round 9".getBytes(), localMachine.proposal(9).get().getAgreement());
     }
 }
