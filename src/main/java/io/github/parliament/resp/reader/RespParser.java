@@ -164,11 +164,8 @@ public class RespParser {
                 if (read > 0) {
                     break;
                 }
-            } while (read != -1);
+            } while (true);
 
-            if (read == -1) {
-                throw new IllegalStateException();
-            }
             bb.flip();
         }
     }

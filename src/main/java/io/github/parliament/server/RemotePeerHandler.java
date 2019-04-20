@@ -19,9 +19,7 @@ import lombok.Getter;
  */
 public class RemotePeerHandler extends Thread {
     @Getter
-    private          SocketChannel clientChannel;
-    @Getter
-    private volatile boolean       dead = false;
+    private SocketChannel clientChannel;
 
     private volatile AcceptorFactory<String> acceptorFactory;
     private          ProposalService         proposalService;
@@ -37,6 +35,9 @@ public class RemotePeerHandler extends Thread {
     @Override
     public void run() {
         do {
+            if (!clientChannel.isConnected()) {
+                return;
+            }
             try {
                 Request req = codec.decode(clientChannel);
                 ByteBuffer src;
@@ -91,23 +92,14 @@ public class RemotePeerHandler extends Thread {
                 }
             } catch (IOException e) {
                 //TODO
-                e.printStackTrace();
-                dead = true;
                 return;
             } catch (Exception e) {
-                dead = true;
-                e.printStackTrace();
-                try {
-                    ByteBuffer src = codec.encodeError("Exception：" + e.getMessage());
-                    while (src.hasRemaining()) {
-                        clientChannel.write(src);
-                    }
-                    clientChannel.close();
-                } catch (IOException e1) {
-                    e1.printStackTrace();
+                if (!clientChannel.isConnected()) {
                     return;
+                } else {
+                    e.printStackTrace();
                 }
             }
-        } while (!dead);
+        } while (true);
     }
 }

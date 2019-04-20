@@ -49,7 +49,7 @@ class PaxosRsmRoundTest {
             PaxosReplicateStateMachine machine = PaxosReplicateStateMachine.builder()
                     .me(me)
                     .peers(peers)
-                    .executorService(executorService)
+                    .threadNo(3)
                     .proposalPersistenceService(proposalService)
                     .build();
             machines.add(machine);
@@ -179,7 +179,7 @@ class PaxosRsmRoundTest {
             proposal.get();
         }
 
-        defer.pull().get();
+        assertTrue(defer.pull().call());
 
         assertEquals(localMachine.maxRound(), defer.maxRound());
     }

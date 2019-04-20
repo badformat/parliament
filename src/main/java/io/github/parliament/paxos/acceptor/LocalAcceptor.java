@@ -1,20 +1,18 @@
 package io.github.parliament.paxos.acceptor;
 
-import java.io.Serializable;
-
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 
 @EqualsAndHashCode
 @ToString
-public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T>, Serializable {
+public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
     @Getter
-    private             T      np;
+    private T      np;
     @Getter
-    private             T      na;
+    private T      na;
     @Getter
-    private             byte[] va;
+    private byte[] va;
 
     @Override
     public Prepare<T> prepare(T n) {

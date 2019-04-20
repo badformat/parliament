@@ -17,17 +17,13 @@ public abstract class Paxos<T extends Comparable<T>> {
             .makeMap();
 
     @Getter
-    protected ExecutorService executorService;
+    protected volatile ExecutorService executorService;
 
     @Getter
     protected Sequence<T> sequence;
 
-    public void shutdown() throws Exception {
-        executorService.shutdown();
-    }
-
     public Future<Proposal> propose(int round, byte[] value) throws Exception {
-        Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer<T>(getAcceptors(r), sequence, value));
+        Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer<>(getAcceptors(r), sequence, value));
 
         return executorService.submit(() -> {
             byte[] agreement = proposer.propose();

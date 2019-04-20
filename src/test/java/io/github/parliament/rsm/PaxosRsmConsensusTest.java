@@ -10,7 +10,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -32,8 +31,6 @@ class PaxosRsmConsensusTest {
 
     @BeforeAll
     static void beforeAll() throws Exception {
-        ExecutorService executorService = Executors.newCachedThreadPool();
-
         List<InetSocketAddress> peers = new ArrayList<>();
 
         for (int i = 0; i < 5; i++) {
@@ -50,7 +47,7 @@ class PaxosRsmConsensusTest {
             PaxosReplicateStateMachine machine = PaxosReplicateStateMachine.builder()
                     .me(me)
                     .peers(peers)
-                    .executorService(executorService)
+                    .threadNo(10)
                     .proposalPersistenceService(proposalService)
                     .build();
             machines.add(machine);
@@ -151,18 +148,22 @@ class PaxosRsmConsensusTest {
         int r = localMachine.nextRound();
 
         byte[] b = localMachine.propose(r, "proposal".getBytes()).get().getAgreement();
-        Assertions.assertEquals(new String("proposal".getBytes()), new String(b));
+        Assertions.assertArrayEquals("proposal".getBytes(), b);
 
-        machines.get(1).leaveAgreementProcess();
-        machines.get(2).leaveAgreementProcess();
-        machines.get(3).leaveAgreementProcess();
+        machines.get(1).shutdown();
+        machines.get(2).shutdown();
+        machines.get(3).shutdown();
+        Thread.sleep(1000 * 2);
 
         r = localMachine.nextRound();
-        assertThrows(ExecutionException.class,
+        assertThrows(Exception.class,
                 localMachine.propose(r, "proposal".getBytes())::get);
 
-        machines.get(1).joinAgreementProcess();
-        machines.get(2).joinAgreementProcess();
-        machines.get(3).joinAgreementProcess();
+        machines.get(1).start();
+        machines.get(2).start();
+        machines.get(3).start();
+        r = localMachine.nextRound();
+        Thread.sleep(1000 * 2);
+        assertArrayEquals(("proposal" + r).getBytes(), localMachine.propose(r, ("proposal" + r).getBytes()).get().getAgreement());
     }
 }

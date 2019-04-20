@@ -11,7 +11,7 @@ import lombok.Setter;
  * @author zy
  */
 @Builder
-class RoundLocalAcceptor extends LocalAcceptor<String> {
+class RsmLocalAcceptor extends LocalAcceptor<String> {
     @Getter
     private int round;
 
