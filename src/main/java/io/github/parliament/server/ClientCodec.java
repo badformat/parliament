@@ -16,7 +16,7 @@ import io.github.parliament.resp.RespBulkString;
 import io.github.parliament.resp.RespError;
 import io.github.parliament.resp.RespInteger;
 import io.github.parliament.resp.RespSimpleString;
-import io.github.parliament.resp.reader.RespParser;
+import io.github.parliament.resp.RespParser;
 
 /**
  *

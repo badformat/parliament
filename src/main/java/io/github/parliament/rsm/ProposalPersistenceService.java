@@ -105,9 +105,19 @@ public class ProposalPersistenceService implements ProposalService {
             }
             if (round > maxRound()) {
                 writeIntToFile(maxFile, round);
+                updateSeq(round);
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    void updateSeq(int seq) throws Exception {
+        try {
+            fileLocsk.get(seqFile).lock();
+            writeIntToFile(seqFile, seq);
+        } finally {
+            fileLocsk.get(seqFile).unlock();
         }
     }
 
@@ -120,9 +130,6 @@ public class ProposalPersistenceService implements ProposalService {
             lock.lock();
             Proposal proposal = Proposal.builder().round(round).agreement(acceptor.getVa()).build();
             saveProposal(proposal);
-            if (round > maxRound()) {
-                writeIntToFile(maxFile, round);
-            }
         } finally {
             lock.unlock();
         }
@@ -165,6 +172,16 @@ public class ProposalPersistenceService implements ProposalService {
     }
 
     @Override
+    public void updateMaxRound(int max) throws Exception {
+        try {
+            fileLocsk.get(maxFile).lock();
+            writeIntToFile(maxFile, max);
+        } finally {
+            fileLocsk.get(maxFile).unlock();
+        }
+    }
+
+    @Override
     public int maxRound() throws Exception {
         try {
             fileLocsk.get(maxFile).lock();
@@ -184,25 +201,19 @@ public class ProposalPersistenceService implements ProposalService {
 
         if (!fileService.exists(file)) {
             fileService.createFileIfNotExists(file);
-            return 0;
+            return -1;
         }
         byte[] bytes = fileService.readAll(file);
         if (bytes == null || bytes.length == 0) {
-            return 0;
+            return -1;
         }
         return Integer.valueOf(new String(bytes));
     }
 
     private int getAndIncreaseIntFile(String name) throws Exception {
+        int i = readIntFromFile(name) + 1;
         Path file = dataPath.resolve(name);
-        byte[] bytes = fileService.readAll(file);
-        int i;
-        if (bytes == null || bytes.length == 0) {
-            i = 0;
-        } else {
-            i = Integer.valueOf(new String(bytes));
-        }
-        fileService.overwriteAll(file, ByteBuffer.wrap(String.valueOf(i + 1).getBytes()));
+        fileService.overwriteAll(file, ByteBuffer.wrap(String.valueOf(i).getBytes()));
         return i;
     }
 

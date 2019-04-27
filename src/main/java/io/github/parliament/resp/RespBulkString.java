@@ -10,7 +10,7 @@ import lombok.Value;
 @ToString
 @Value
 public class RespBulkString implements RespData {
-    public static final char firstByte = '$';
+    public static final char firstChar = '$';
 
     private final static RespBulkString NULL = new RespBulkString(null);
     @Getter
@@ -38,7 +38,7 @@ public class RespBulkString implements RespData {
     @Override
     public byte[] toBytes() {
         StringBuilder sb = new StringBuilder();
-        sb.append(firstByte);
+        sb.append(firstChar);
         sb.append(length);
         sb.append("\r\n");
         byte[] bytes = sb.toString().getBytes();

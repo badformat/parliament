@@ -1,5 +1,6 @@
 package io.github.parliament.resp;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -13,39 +14,39 @@ import lombok.val;
 @EqualsAndHashCode
 @ToString
 public class RespArray implements RespData {
-    public final static char firstByte = '*';
+    final static char           firstChar = '*';
     @Getter
     @val
-    private List<RespData> datas;
+    private      List<RespData> datas;
 
     public static RespArray empty() {
         return new RespArray(Collections.emptyList());
     }
 
     public static RespArray with(List<RespData> datas) {
-        return new RespArray(Collections.unmodifiableList(datas));
+        return new RespArray(new ArrayList<>(datas));
     }
 
     public static RespArray with(RespData... datas) {
         return new RespArray(Arrays.asList(datas));
     }
 
-    RespArray(List<RespData> emptyList) {
-        this.datas = emptyList;
+    private RespArray(List<RespData> datas) {
+        this.datas = datas;
     }
 
     public int size() {
         return datas.size();
     }
 
-    public RespData get(int i) {
-        return datas.get(i);
+    public <T> T get(int i) {
+        return (T) datas.get(i);
     }
 
     @Override
     public byte[] toBytes() {
         StringBuilder sb = new StringBuilder();
-        sb.append(firstByte);
+        sb.append(firstChar);
         sb.append(datas.size());
         sb.append("\r\n");
 

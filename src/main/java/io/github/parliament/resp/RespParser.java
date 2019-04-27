@@ -1,4 +1,4 @@
-package io.github.parliament.resp.reader;
+package io.github.parliament.resp;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -9,12 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.google.common.base.Preconditions;
-import io.github.parliament.resp.RespArray;
-import io.github.parliament.resp.RespBulkString;
-import io.github.parliament.resp.RespData;
-import io.github.parliament.resp.RespError;
-import io.github.parliament.resp.RespInteger;
-import io.github.parliament.resp.RespSimpleString;
 
 /**
  *
@@ -39,15 +33,15 @@ public class RespParser {
 
         byte firstByte = bb.get(bb.position());
         switch (firstByte) {
-            case RespArray.firstByte:
+            case RespArray.firstChar:
                 return getAsArray();
-            case RespSimpleString.firstByte:
+            case RespSimpleString.firstChar:
                 return getAsSimpleString();
-            case RespBulkString.firstByte:
+            case RespBulkString.firstChar:
                 return getAsBulkString();
-            case RespError.firstByte:
+            case RespError.firstChar:
                 return getAsError();
-            case RespInteger.firstByte:
+            case RespInteger.firstChar:
                 return getAsInteger();
             default:
                 throw new IllegalStateException();
@@ -55,17 +49,17 @@ public class RespParser {
     }
 
     public RespInteger getAsInteger() throws IOException {
-        return RespInteger.with(readStringLine((byte) RespInteger.firstByte));
+        return RespInteger.with(readStringLine((byte) RespInteger.firstChar));
     }
 
     public RespError getAsError() throws IOException {
-        return RespError.withUTF8(readStringLine((byte) RespError.firstByte));
+        return RespError.withUTF8(readStringLine((byte) RespError.firstChar));
     }
 
     public RespBulkString getAsBulkString() throws IOException {
         readBytesIfNotHasRemaining();
         byte firstByte = bb.get();
-        Preconditions.checkState(firstByte == RespBulkString.firstByte);
+        Preconditions.checkState(firstByte == RespBulkString.firstChar);
 
         int len = readLength();
         RespBulkString bs = null;
@@ -91,13 +85,13 @@ public class RespParser {
     }
 
     public RespSimpleString getAsSimpleString() throws IOException {
-        return RespSimpleString.withUTF8(readStringLine((byte) RespSimpleString.firstByte));
+        return RespSimpleString.withUTF8(readStringLine((byte) RespSimpleString.firstChar));
     }
 
     public RespArray getAsArray() throws IOException {
         readBytesIfNotHasRemaining();
         byte firstByte = bb.get();
-        Preconditions.checkState(firstByte == RespArray.firstByte);
+        Preconditions.checkState(firstByte == RespArray.firstChar);
 
         int len = readLength();
 

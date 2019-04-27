@@ -15,6 +15,7 @@ import java.util.concurrent.Future;
 
 import io.github.parliament.files.DefaultFileService;
 import io.github.parliament.paxos.Proposal;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,14 +78,15 @@ class PaxosRsmRoundTest {
         for (PaxosReplicateStateMachine machine : machines) {
             machine.start();
         }
-        int r = localMachine.nextRound();
-        byte[] p = localMachine.propose(r, "proposal".getBytes()).get().getAgreement();
+        int r = 2333333;
+
+        Proposal pf = localMachine.propose(r, "proposal".getBytes()).get();
 
         for (PaxosReplicateStateMachine machine : machines) {
-            Optional<Proposal> proposal = machine.proposal(r);
+            Optional<Proposal> proposal = machine.proposal(pf.getRound());
             assertTrue(proposal.isPresent());
             assertEquals(r, proposal.get().getRound());
-            assertArrayEquals(p, proposal.get().getAgreement());
+            assertArrayEquals(pf.getAgreement(), proposal.get().getAgreement());
         }
     }
 
@@ -93,7 +95,7 @@ class PaxosRsmRoundTest {
         for (PaxosReplicateStateMachine machine : machines) {
             machine.start();
         }
-        int r = localMachine.nextRound();
+        int r = 23303;
         byte[] p = localMachine.propose(r, "proposal".getBytes()).get().getAgreement();
 
         assertArrayEquals(p, localMachine.propose(r, "proposal 2".getBytes()).get().getAgreement());
@@ -107,7 +109,7 @@ class PaxosRsmRoundTest {
 
     @Test
     void min() throws Exception {
-        assertEquals(0, localMachine.minRound());
+        assertEquals(-1, localMachine.minRound());
     }
 
     @Test
@@ -116,8 +118,8 @@ class PaxosRsmRoundTest {
             machine.start();
         }
         for (int i = 0; i < 10; i++) {
-            int r = localMachine.nextRound();
-            localMachine.propose(r, ("proposal of round " + r).getBytes()).get();
+            long r = System.currentTimeMillis();
+            localMachine.propose(("proposal of round " + r).getBytes()).get();
         }
         localMachine.forget(5);
         assertEquals(5, localMachine.minRound());
@@ -129,8 +131,8 @@ class PaxosRsmRoundTest {
             machine.start();
         }
         for (int i = 0; i < 10; i++) {
-            int r = localMachine.nextRound();
-            localMachine.propose(r, ("proposal of round " + r).getBytes()).get();
+            long r = System.currentTimeMillis();
+            localMachine.propose(("proposal of round " + r).getBytes()).get();
         }
         assertEquals(9, localMachine.maxRound());
     }
@@ -145,8 +147,8 @@ class PaxosRsmRoundTest {
 
         List<Future<Proposal>> proposals = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
-            int r = localMachine.nextRound();
-            proposals.add(localMachine.propose(r, ("proposal of round " + r).getBytes()));
+            long r = System.currentTimeMillis();
+            proposals.add(localMachine.propose(("proposal of round " + r).getBytes()));
         }
 
         for (Future<Proposal> proposal : proposals) {
@@ -171,8 +173,8 @@ class PaxosRsmRoundTest {
 
         List<Future<Proposal>> proposals = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
-            int r = localMachine.nextRound();
-            proposals.add(localMachine.propose(r, ("proposal of round " + r).getBytes()));
+            long r = System.currentTimeMillis();
+            proposals.add(localMachine.propose(("proposal of round " + r).getBytes()));
         }
 
         for (Future<Proposal> proposal : proposals) {
@@ -192,8 +194,8 @@ class PaxosRsmRoundTest {
 
         List<Future<Proposal>> proposals = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
-            int r = localMachine.nextRound();
-            proposals.add(localMachine.propose(r, ("proposal of round " + i).getBytes()));
+            long r = System.currentTimeMillis();
+            proposals.add(localMachine.propose(("proposal of round " + i).getBytes()));
         }
 
         for (Future<Proposal> proposal : proposals) {

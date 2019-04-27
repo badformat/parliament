@@ -142,6 +142,11 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
         return proposalPersistenceService.maxRound();
     }
 
+    synchronized public Future<Proposal> propose(byte[] proposal) throws Exception {
+        int round = nextRound();
+        return propose(round, proposal);
+    }
+
     public Optional<Proposal> proposal(int round) throws Exception {
         return proposalPersistenceService.getProposal(round);
     }

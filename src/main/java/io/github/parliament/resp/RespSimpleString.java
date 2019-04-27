@@ -7,9 +7,9 @@ import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 @EqualsAndHashCode(callSuper = true)
-@ToString
+@ToString(callSuper = true)
 public class RespSimpleString extends RespString {
-    public static final char firstByte = '+';
+    static final char firstChar = '+';
 
     static public RespSimpleString withUTF8(String content) {
         return new RespSimpleString(content, StandardCharsets.UTF_8);
@@ -20,6 +20,11 @@ public class RespSimpleString extends RespString {
     }
 
     public RespSimpleString(String content, Charset charset) {
-        super(firstByte, content, charset);
+        super(content, charset);
+    }
+
+    @Override
+    char getFirstChar() {
+        return firstChar;
     }
 }

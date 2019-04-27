@@ -10,7 +10,7 @@ import lombok.ToString;
 @EqualsAndHashCode(callSuper = true)
 @ToString
 public class RespInteger extends RespString {
-    public final static char    firstByte = ':';
+    public final static char    firstChar = ':';
     @Getter
     private             Integer n         = null;
 
@@ -27,8 +27,13 @@ public class RespInteger extends RespString {
     }
 
     public RespInteger(String content, Charset charset) {
-        super(firstByte, content, charset);
+        super(content, charset);
         n = Integer.valueOf(content);
+    }
+
+    @Override
+    char getFirstChar() {
+        return firstChar;
     }
 
 }

@@ -15,7 +15,7 @@ import io.github.parliament.resp.RespData;
 import io.github.parliament.resp.RespError;
 import io.github.parliament.resp.RespInteger;
 import io.github.parliament.resp.RespSimpleString;
-import io.github.parliament.resp.reader.RespParser;
+import io.github.parliament.resp.RespParser;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;

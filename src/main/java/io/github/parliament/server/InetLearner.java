@@ -24,6 +24,7 @@ public class InetLearner {
         int max = 0;
         try {
             max = learnMax().stream().reduce(0, (a, b) -> b > a ? b : a);
+            proposalService.updateMaxRound(max);
             if (begin < max) {
                 pull(begin, max);
             }

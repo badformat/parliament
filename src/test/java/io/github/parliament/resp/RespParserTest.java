@@ -1,4 +1,4 @@
-package io.github.parliament.resp.reader;
+package io.github.parliament.resp;
 
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
@@ -6,12 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
-import io.github.parliament.resp.RespArray;
-import io.github.parliament.resp.RespBulkString;
-import io.github.parliament.resp.RespError;
-import io.github.parliament.resp.RespInteger;
-import io.github.parliament.resp.RespSimpleString;
-import io.github.parliament.resp.RespWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;

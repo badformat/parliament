@@ -82,9 +82,8 @@ class PaxosRsmConsensusTest {
 
     @RepeatedTest(10)
     void propose() throws Exception {
-        int r = localMachine.nextRound();
-        byte[] p = ("proposal " + r).getBytes();
-        byte[] d = localMachine.propose(r, p).get().getAgreement();
+        byte[] p = ("proposal " + System.currentTimeMillis()).getBytes();
+        byte[] d = localMachine.propose(p).get().getAgreement();
         Assertions.assertArrayEquals(p, d);
     }
 
@@ -92,9 +91,8 @@ class PaxosRsmConsensusTest {
     void proposeConcurrent() throws Exception {
         List<Future<Proposal>> futures = new ArrayList<>();
         for (PaxosReplicateStateMachine machine : machines) {
-            int r = machine.nextRound();
-            byte[] p = ("proposal :" + r + "from " + machine.getMe().toString()).getBytes();
-            futures.add(machine.propose(r, p));
+            byte[] p = ("proposal :" + System.currentTimeMillis() + "from " + machine.getMe().toString()).getBytes();
+            futures.add(machine.propose(p));
         }
 
         for (Future<Proposal> f : futures) {
@@ -116,11 +114,11 @@ class PaxosRsmConsensusTest {
         CountDownLatch latch = new CountDownLatch(1);
         List<Future<Proposal>> futures = new ArrayList<>();
         for (PaxosReplicateStateMachine machine : machines) {
-            int r = machine.nextRound();
+            long r = System.currentTimeMillis();
             byte[] p = ("proposal :" + r + "from " + machine.getMe().toString()).getBytes();
             Future<Proposal> f = es.submit(() -> {
                 latch.await();
-                return machine.propose(r, p).get();
+                return machine.propose(p).get();
             });
             futures.add(f);
         }
@@ -145,9 +143,7 @@ class PaxosRsmConsensusTest {
 
     @Test
     void throwExceptionWhenMajorityIsDown() throws Exception {
-        int r = localMachine.nextRound();
-
-        byte[] b = localMachine.propose(r, "proposal".getBytes()).get().getAgreement();
+        byte[] b = localMachine.propose("proposal".getBytes()).get().getAgreement();
         Assertions.assertArrayEquals("proposal".getBytes(), b);
 
         machines.get(1).shutdown();
@@ -155,15 +151,16 @@ class PaxosRsmConsensusTest {
         machines.get(3).shutdown();
         Thread.sleep(1000 * 2);
 
-        r = localMachine.nextRound();
+        int r = localMachine.nextRound();
         assertThrows(Exception.class,
-                localMachine.propose(r, "proposal".getBytes())::get);
+                localMachine.propose("proposal".getBytes())::get);
 
         machines.get(1).start();
         machines.get(2).start();
         machines.get(3).start();
         r = localMachine.nextRound();
+
         Thread.sleep(1000 * 2);
-        assertArrayEquals(("proposal" + r).getBytes(), localMachine.propose(r, ("proposal" + r).getBytes()).get().getAgreement());
+        assertArrayEquals(("proposal" + r).getBytes(), localMachine.propose(("proposal" + r).getBytes()).get().getAgreement());
     }
 }

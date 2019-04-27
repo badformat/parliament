@@ -1,5 +1,6 @@
 package io.github.parliament.server;
 
+import java.io.IOException;
 import java.util.Optional;
 
 import io.github.parliament.paxos.Proposal;
@@ -19,4 +20,6 @@ public interface ProposalService {
     int maxRound() throws Exception;
 
     int minRound() throws Exception;
+
+    void updateMaxRound(int max) throws Exception;
 }
