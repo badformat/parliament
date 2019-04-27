@@ -26,9 +26,12 @@ class KeyValueServerTest {
 
     @BeforeAll
     static void beforeAll() throws Exception {
-        server = KeyValueServer.builder().socketAddress(new InetSocketAddress(30000)).build();
         KeyValueEngine memKeyValueEngine = new MemoryKeyValueEngine();
-        server.setKeyValueEngine(memKeyValueEngine);
+
+        server = KeyValueServer.builder()
+                .socketAddress(new InetSocketAddress("127.0.0.1", 30000))
+                .keyValueEngine(memKeyValueEngine)
+                .build();
         server.start();
         client = SocketChannel.open(server.getSocketAddress());
     }

@@ -21,7 +21,7 @@ class ClientHandler implements CompletionHandler<Integer, KeyValueEngine> {
     @Getter(value = AccessLevel.PACKAGE)
     private ByteBuffer                byteBuffer  = ByteBuffer.allocate(2048);
     private RespDecoder               respDecoder = new RespDecoder();
-    private int                       timeOutMs   = 0;
+    private int                       timeOutMs   = 100;
 
     ClientHandler(AsynchronousSocketChannel channel) {
         this.channel = channel;

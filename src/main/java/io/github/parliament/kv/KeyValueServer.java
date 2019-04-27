@@ -6,14 +6,15 @@ import java.nio.channels.AsynchronousChannelGroup;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import io.github.parliament.files.DefaultFileService;
+import io.github.parliament.rsm.PaxosReplicateStateMachine;
+import io.github.parliament.rsm.ProposalPersistenceService;
+import lombok.*;
 
 /**
  *
@@ -24,13 +25,13 @@ public class KeyValueServer {
     private InetSocketAddress               socketAddress;
     private AsynchronousServerSocketChannel serverSocketChannel;
     private AsynchronousChannelGroup        channelGroup;
-    @Getter(AccessLevel.PACKAGE)
-    @Setter(AccessLevel.PACKAGE)
     private KeyValueEngine                  keyValueEngine;
+    private PaxosReplicateStateMachine      machine;
 
     @Builder
-    public KeyValueServer(InetSocketAddress socketAddress) throws Exception {
+    public KeyValueServer(@NonNull InetSocketAddress socketAddress, @NonNull KeyValueEngine keyValueEngine) throws Exception {
         this.socketAddress = socketAddress;
+        this.keyValueEngine = keyValueEngine;
     }
 
     public void start() throws Exception {
@@ -70,7 +71,24 @@ public class KeyValueServer {
         prop = System.getProperty("kv");
         InetSocketAddress kv = getInetSocketAddress(prop);
 
-        KeyValueServer server = KeyValueServer.builder().socketAddress(kv).build();
+        ProposalPersistenceService proposalService = ProposalPersistenceService
+                .builder()
+                .fileService(new DefaultFileService())
+                .path(Paths.get(dir))
+                .build();
+
+        PaxosReplicateStateMachine  machine=PaxosReplicateStateMachine
+                .builder()
+                .me(me)
+                .peers(peers)
+                .proposalPersistenceService(proposalService)
+                .threadNo(20)
+                .build();
+
+        machine.start();
+        KeyValueEngine keyValueEngine = PaxosKeyValueEngine.builder().rsm(machine).build();
+
+        KeyValueServer server = KeyValueServer.builder().socketAddress(kv).keyValueEngine(keyValueEngine).build();
         server.start();
     }
 

@@ -86,6 +86,11 @@ public class PaxosKeyValueEngine implements KeyValueEngine {
                 key = consensusReq.get(1);
                 cursor = proposal.getRound() + 1;
                 return cache.containsKey(key) ? cache.get(key) : nullBulk();
+            case DEL_CMD:
+                key = consensusReq.get(1);
+                cursor = proposal.getRound() + 1;
+                value =  cache.remove(key);
+                return value == null ? nullBulk() : value;
             default:
                 throw new UnknownKeyValueCommand("Unknown key value service: " + cmdStr);
         }
