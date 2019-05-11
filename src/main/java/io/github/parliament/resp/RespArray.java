@@ -15,7 +15,6 @@ import lombok.val;
 @ToString
 public class RespArray implements RespData {
     final static char           firstChar = '*';
-    @Getter
     @val
     private      List<RespData> datas;
 
@@ -41,6 +40,10 @@ public class RespArray implements RespData {
 
     public <T> T get(int i) {
         return (T) datas.get(i);
+    }
+
+    public <T> List<T> getDatas() {
+        return (List<T>) datas;
     }
 
     @Override

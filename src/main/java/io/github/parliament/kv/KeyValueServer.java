@@ -26,7 +26,6 @@ public class KeyValueServer {
     private AsynchronousServerSocketChannel serverSocketChannel;
     private AsynchronousChannelGroup        channelGroup;
     private KeyValueEngine                  keyValueEngine;
-    private PaxosReplicateStateMachine      machine;
 
     @Builder
     public KeyValueServer(@NonNull InetSocketAddress socketAddress, @NonNull KeyValueEngine keyValueEngine) throws Exception {

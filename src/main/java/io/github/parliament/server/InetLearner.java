@@ -23,7 +23,7 @@ public class InetLearner {
     public boolean pullAll(int begin) {
         int max = 0;
         try {
-            max = learnMax().stream().reduce(0, (a, b) -> b > a ? b : a);
+            max = learnMax().stream().reduce(-1, (a, b) -> b > a ? b : a);
             proposalService.updateMaxRound(max);
             if (begin < max) {
                 pull(begin, max);
@@ -70,11 +70,11 @@ public class InetLearner {
             while (cmd.hasRemaining()) {
                 remote.write(cmd);
             }
-            Optional<Proposal> ret = codec.decodePull(remote);
+            Optional<byte[]> ret = codec.decodePull(round, remote);
             if (!ret.isPresent()) {
                 return false;
             } else {
-                proposalService.saveProposal(ret.get());
+                proposalService.saveProposal(round, ret.get());
             }
             return true;
         } catch (Exception e) {

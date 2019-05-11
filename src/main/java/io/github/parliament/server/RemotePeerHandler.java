@@ -5,12 +5,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.Optional;
 
-import io.github.parliament.server.ServerCodec.Request;
-import io.github.parliament.paxos.Proposal;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.AcceptorFactory;
 import io.github.parliament.paxos.acceptor.Prepare;
+import io.github.parliament.server.ServerCodec.Request;
 import lombok.Getter;
 
 /**
@@ -34,11 +33,11 @@ public class RemotePeerHandler extends Thread {
 
     @Override
     public void run() {
-        do {
-            if (!clientChannel.isConnected()) {
-                return;
-            }
-            try {
+        try {
+            do {
+                if (!clientChannel.isConnected()) {
+                    return;
+                }
                 Request req = codec.decode(clientChannel);
                 ByteBuffer src;
                 Acceptor<String> acceptor = acceptorFactory.createLocalAcceptorFor(
@@ -81,8 +80,8 @@ public class RemotePeerHandler extends Thread {
                         break;
                     case pull:
                         int rn = req.getRound();
-                        Optional<Proposal> p = proposalService.getProposal(rn);
-                        src = codec.encodeProposal(p);
+                        Optional<byte[]> p = proposalService.getProposal(rn);
+                        src = codec.encodeProposal(rn, p);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
@@ -90,16 +89,18 @@ public class RemotePeerHandler extends Thread {
                     default:
                         throw new IllegalStateException();
                 }
+
+            } while (true);
+        } catch (Exception e) {
+            //e.printStackTrace();
+        }
+
+        if (clientChannel.isConnected()) {
+            try {
+                clientChannel.close();
             } catch (IOException e) {
-                //TODO
-                return;
-            } catch (Exception e) {
-                if (!clientChannel.isConnected()) {
-                    return;
-                } else {
-                    e.printStackTrace();
-                }
+                e.printStackTrace();
             }
-        } while (true);
+        }
     }
 }

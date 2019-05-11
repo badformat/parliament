@@ -3,7 +3,6 @@ package io.github.parliament.paxos;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 
 import com.google.common.collect.MapMaker;
 import io.github.parliament.paxos.acceptor.Acceptor;
@@ -22,13 +21,10 @@ public abstract class Paxos<T extends Comparable<T>> {
     @Getter
     protected Sequence<T> sequence;
 
-    public Future<Proposal> propose(int round, byte[] value) throws Exception {
+    public Proposal propose(int round, byte[] value) {
         Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer<>(getAcceptors(r), sequence, value));
 
-        return executorService.submit(() -> {
-            byte[] agreement = proposer.propose();
-            return Proposal.builder().agreement(agreement).round(round).build();
-        });
+        return Proposal.builder().agreement(executorService.submit(proposer::propose)).round(round).build();
     }
 
     protected abstract Collection<Acceptor<T>> getAcceptors(int round);

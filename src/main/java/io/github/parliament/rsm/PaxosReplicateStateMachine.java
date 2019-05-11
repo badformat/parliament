@@ -70,13 +70,13 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
                 .expireAfterWrite(10, TimeUnit.MINUTES)
                 .build(new CacheLoader<Integer, RsmLocalAcceptor>() {
                     public RsmLocalAcceptor load(Integer round) throws Exception {
-                        Optional<Proposal> proposal = proposalPersistenceService.getProposal(round);
+                        Optional<byte[]> p = proposalPersistenceService.getProposal(round);
                         RsmLocalAcceptor acceptor = RsmLocalAcceptor.builder().round(round).proposalService(
                                 proposalPersistenceService).build();
-                        if (proposal.isPresent()) {
+                        if (p.isPresent()) {
                             String n = sequence.next();
                             acceptor.prepare(n);
-                            acceptor.accept(n, proposal.get().getAgreement());
+                            acceptor.accept(n, p.get());
                         }
                         return acceptor;
                     }
@@ -142,12 +142,15 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
         return proposalPersistenceService.maxRound();
     }
 
-    synchronized public Future<Proposal> propose(byte[] proposal) throws Exception {
-        int round = nextRound();
-        return propose(round, proposal);
+    public int round() throws Exception {
+        return proposalPersistenceService.round();
     }
 
-    public Optional<Proposal> proposal(int round) throws Exception {
+    public Proposal propose(byte[] proposal) throws Exception {
+        return propose(nextRound(), proposal);
+    }
+
+    public Optional<byte[]> proposal(int round) throws Exception {
         return proposalPersistenceService.getProposal(round);
     }
 

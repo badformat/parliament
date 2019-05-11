@@ -21,6 +21,6 @@ class RsmLocalAcceptor extends LocalAcceptor<String> {
 
     @Override
     public void decide(byte[] agreement) throws Exception {
-        proposalService.notice(round, this);
+        proposalService.notice(round, agreement);
     }
 }

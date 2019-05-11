@@ -148,11 +148,11 @@ class ServerCodec {
         return RespInteger.with(max).toByteBuffer();
     }
 
-    ByteBuffer encodeProposal(Optional<Proposal> proposal) {
+    ByteBuffer encodeProposal(int round, Optional<byte[]> proposal) {
         if (!proposal.isPresent()) {
             return RespArray.empty().toByteBuffer();
         }
-        return RespArray.with(RespInteger.with(proposal.get().getRound()), RespBulkString.with(proposal.get().getAgreement()))
+        return RespArray.with(RespInteger.with(round), RespBulkString.with(proposal.get()))
                 .toByteBuffer();
     }
 }

@@ -17,6 +17,7 @@ import io.github.parliament.resp.RespError;
 import io.github.parliament.resp.RespInteger;
 import io.github.parliament.resp.RespSimpleString;
 import io.github.parliament.resp.RespParser;
+import org.checkerframework.checker.nullness.Opt;
 
 /**
  *
@@ -124,7 +125,7 @@ class ClientCodec {
         return respParser.getAsInteger().getN();
     }
 
-    Optional<Proposal> decodePull(SocketChannel remote) throws IOException {
+    Optional<byte[]> decodePull(int round, SocketChannel remote) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.size() == 0) {
@@ -136,9 +137,9 @@ class ClientCodec {
         }
 
         int rs = ((RespInteger) array.get(0)).getN();
+        Preconditions.checkState(rs == round);
         byte[] agreement = ((RespBulkString) array.get(1)).getContent();
-
-        return Optional.of(Proposal.builder().round(rs).agreement(agreement).build());
+        return Optional.of(agreement);
     }
 
 }

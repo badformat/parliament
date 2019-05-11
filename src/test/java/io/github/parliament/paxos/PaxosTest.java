@@ -21,7 +21,7 @@ class PaxosTest {
     @Test
     void testPropose() throws Exception {
         byte[] value = "content".getBytes();
-        assertArrayEquals(value, paxos.propose(1, value).get().getAgreement());
+        assertArrayEquals(value, paxos.propose(1, value).getAgreement().get());
     }
 
 }

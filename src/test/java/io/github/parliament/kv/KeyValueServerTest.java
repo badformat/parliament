@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class KeyValueServerTest {
     private static KeyValueServer server;
     private static SocketChannel  client;
+    private static RespDecoder    respDecoder = RespDecoder.create();
 
     @BeforeAll
     static void beforeAll() throws Exception {
@@ -91,15 +92,17 @@ class KeyValueServerTest {
     }
 
     private RespData receiveResp() throws IOException {
-        ByteBuffer dst = ByteBuffer.allocate(1024);
-        RespDecoder respDecoder = RespDecoder.create();
-        while (client.read(dst) != -1) {
+        ByteBuffer dst = ByteBuffer.allocate(10);
+        int len = client.read(dst);
+        while (len != -1) {
             dst.flip();
             respDecoder.decode(dst);
             RespData resp = respDecoder.get();
             if (resp != null) {
                 return resp;
             }
+            dst.clear();
+            len = client.read(dst);
         }
         throw new IllegalStateException();
     }

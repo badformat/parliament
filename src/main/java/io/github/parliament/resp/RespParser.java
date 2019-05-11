@@ -157,6 +157,8 @@ public class RespParser {
                 read = channel.read(bb);
                 if (read > 0) {
                     break;
+                } else {
+                    channel.close();
                 }
             } while (true);
 

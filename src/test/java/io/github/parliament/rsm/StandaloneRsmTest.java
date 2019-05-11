@@ -56,9 +56,8 @@ class StandaloneRsmTest {
     @Test
     void propose() throws Exception {
         byte[] p = "any value".getBytes();
-        Future<Proposal> pf = machine.propose(p);
-        Proposal proposal = pf.get();
-        assertArrayEquals(p, proposal.getAgreement());
+        Proposal proposal = machine.propose(p);
+        assertArrayEquals(p, proposal.getAgreement().get());
     }
     // TODO 文件锁
 }

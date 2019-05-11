@@ -1,9 +1,5 @@
 package io.github.parliament.rsm;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -16,8 +12,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.MapMaker;
 import io.github.parliament.files.FileService;
-import io.github.parliament.paxos.Proposal;
-import io.github.parliament.paxos.acceptor.LocalAcceptor;
 import io.github.parliament.server.ProposalService;
 import lombok.Builder;
 import lombok.Getter;
@@ -40,7 +34,7 @@ public class ProposalPersistenceService implements ProposalService {
             .weakValues()
             .makeMap();
 
-    private volatile ConcurrentHashMap<String, Lock> fileLocsk = new ConcurrentHashMap<>();
+    private volatile ConcurrentHashMap<String, Lock> fileLocks = new ConcurrentHashMap<>();
 
     @Builder
     public ProposalPersistenceService(FileService fileService, Path path) throws Exception {
@@ -52,13 +46,13 @@ public class ProposalPersistenceService implements ProposalService {
         createFileIfNotExists(path.resolve(seqFile));
         createFileIfNotExists(path.resolve(minFile));
         createFileIfNotExists(path.resolve(maxFile));
-        fileLocsk.put(seqFile, new ReentrantLock());
-        fileLocsk.put(maxFile, new ReentrantLock());
-        fileLocsk.put(minFile, new ReentrantLock());
+        fileLocks.put(seqFile, new ReentrantLock());
+        fileLocks.put(maxFile, new ReentrantLock());
+        fileLocks.put(minFile, new ReentrantLock());
     }
 
     @Override
-    public Optional<Proposal> getProposal(int round) throws Exception {
+    public Optional<byte[]> getProposal(int round) throws Exception {
         Lock lock = getLockFor(round);
         try {
             lock.lock();
@@ -70,66 +64,45 @@ public class ProposalPersistenceService implements ProposalService {
                 return Optional.empty();
             }
 
-            try (FileInputStream is = fileService.newInputStream(roundFile)) {
-                ObjectInputStream ois = new ObjectInputStream(is);
-                Proposal proposal = (Proposal) ois.readObject();
-                return Optional.of(Proposal
-                        .builder()
-                        .round(proposal.getRound())
-                        .agreement(proposal.getAgreement())
-                        .build());
-            }
+            return Optional.of(fileService.readAll(roundFile));
         } finally {
             lock.unlock();
         }
     }
 
     @Override
-    public void saveProposal(Proposal proposal) throws Exception {
-        Lock lock = getLockFor(proposal.getRound());
+    public void saveProposal(int round, byte[] value) throws Exception {
+        Lock lock = getLockFor(round);
         try {
             lock.lock();
-            int round = proposal.getRound();
             Path roundFile = dataPath.resolve(String.valueOf(round));
-            Optional<Proposal> p = getProposal(round);
+            Optional<byte[]> p = getProposal(round);
             if (p.isPresent()) {
-                Preconditions.checkState(Arrays.equals(p.get().getAgreement(), proposal.getAgreement()));
+                Preconditions.checkState(Arrays.equals(p.get(), value));
                 return;
             }
 
             fileService.createFileIfNotExists(roundFile);
 
-            try (FileOutputStream os = fileService.newOutputstream(roundFile)) {
-                ObjectOutputStream oos = new ObjectOutputStream(os);
-                oos.writeObject(proposal);
-            }
+            fileService.overwriteAll(roundFile, ByteBuffer.wrap(value));
+
             if (round > maxRound()) {
-                writeIntToFile(maxFile, round);
-                updateSeq(round);
+                updateMaxRound(round);
+                updateNextRound(round);
             }
         } finally {
             lock.unlock();
         }
     }
 
-    void updateSeq(int seq) throws Exception {
-        try {
-            fileLocsk.get(seqFile).lock();
-            writeIntToFile(seqFile, seq);
-        } finally {
-            fileLocsk.get(seqFile).unlock();
-        }
-    }
-
     @Override
-    public void notice(int round, LocalAcceptor acceptor) throws Exception {
+    public void notice(int round, byte[] value) throws Exception {
         Preconditions.checkState(round >= minRound());
-        Preconditions.checkNotNull(acceptor.getVa(), "va is null");
+        Preconditions.checkNotNull(value, "va is null");
         Lock lock = getLockFor(round);
         try {
             lock.lock();
-            Proposal proposal = Proposal.builder().round(round).agreement(acceptor.getVa()).build();
-            saveProposal(proposal);
+            saveProposal(round, value);
         } finally {
             lock.unlock();
         }
@@ -137,10 +110,31 @@ public class ProposalPersistenceService implements ProposalService {
 
     int nextRound() throws Exception {
         try {
-            fileLocsk.get(seqFile).lock();
+            fileLocks.get(seqFile).lock();
             return getAndIncreaseIntFile(seqFile);
         } finally {
-            fileLocsk.get(seqFile).unlock();
+            fileLocks.get(seqFile).unlock();
+        }
+    }
+
+    private void updateNextRound(int round) throws Exception {
+        try {
+            fileLocks.get(seqFile).lock();
+            if (round > round()) {
+                writeIntToFile(seqFile, round);
+            }
+        } finally {
+            fileLocks.get(seqFile).unlock();
+        }
+    }
+
+    @Override
+    public int round() throws Exception {
+        try {
+            fileLocks.get(seqFile).lock();
+            return readIntFromFile(seqFile);
+        } finally {
+            fileLocks.get(seqFile).unlock();
         }
     }
 
@@ -164,30 +158,32 @@ public class ProposalPersistenceService implements ProposalService {
     @Override
     public int minRound() throws Exception {
         try {
-            fileLocsk.get(minFile).lock();
+            fileLocks.get(minFile).lock();
             return readIntFromFile(minFile);
         } finally {
-            fileLocsk.get(minFile).unlock();
+            fileLocks.get(minFile).unlock();
         }
     }
 
     @Override
     public void updateMaxRound(int max) throws Exception {
         try {
-            fileLocsk.get(maxFile).lock();
-            writeIntToFile(maxFile, max);
+            fileLocks.get(maxFile).lock();
+            if (max > maxRound()) {
+                writeIntToFile(maxFile, max);
+            }
         } finally {
-            fileLocsk.get(maxFile).unlock();
+            fileLocks.get(maxFile).unlock();
         }
     }
 
     @Override
     public int maxRound() throws Exception {
         try {
-            fileLocsk.get(maxFile).lock();
+            fileLocks.get(maxFile).lock();
             return readIntFromFile(maxFile);
         } finally {
-            fileLocsk.get(maxFile).unlock();
+            fileLocks.get(maxFile).unlock();
         }
     }
 
@@ -226,4 +222,5 @@ public class ProposalPersistenceService implements ProposalService {
     private Lock getLockFor(int round) {
         return locks.computeIfAbsent(round, (r) -> new ReentrantLock());
     }
+
 }
