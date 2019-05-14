@@ -71,8 +71,10 @@ class PaxosKeyValueEngineTest {
             machine.start();
         }
 
-        kv = PaxosKeyValueEngine.builder().rsm(me).build();
-        kv2 = PaxosKeyValueEngine.builder().rsm(competitor).build();
+        kv = PaxosKeyValueEngine.builder().rsm(me).path(me.getProposalPersistenceService().getDataPath().resolve("db"))
+                .build();
+        kv2 = PaxosKeyValueEngine.builder().rsm(competitor).path(competitor.getProposalPersistenceService().getDataPath().resolve("db"))
+                .build();
         kv.start();
         kv2.start();
     }
@@ -162,7 +164,9 @@ class PaxosKeyValueEngineTest {
         }).count());
     }
 
-    // 保证实例间memtable一致
+    /**
+     * 保证实例间memtable一致
+     */
     @Test
     void memtableConsistency() {
         int limit = 20;
@@ -202,9 +206,9 @@ class PaxosKeyValueEngineTest {
         assertEquals(kv.getMemtable(), kv2.getMemtable());
     }
 
-    // TODO simple persistence key value store.
-    // TODO cursor's persistence
+    //TODO cursor persistence
     // TODO wal log
+    // TODO simple persistence key value store.
     // TODO dirty file
 
     private RespArray request(String cmd, String... args) {

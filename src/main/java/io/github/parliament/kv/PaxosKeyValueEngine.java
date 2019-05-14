@@ -1,6 +1,7 @@
 package io.github.parliament.kv;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -24,12 +25,15 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
  * @author zy
  */
 public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
+    private static final Logger                              logger            = LoggerFactory.getLogger(PaxosKeyValueEngine.class);
     private static final String                              PUT_CMD           = "put";
     private static final String                              GET_CMD           = "get";
     private static final String                              DEL_CMD           = "del";
@@ -40,6 +44,8 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
     private volatile     int                                 cursor            = 0;
     private volatile     BlockingQueue<RequestWork>          works             = new ArrayBlockingQueue<>(200);
     private              Thread                              worker;
+    @Getter(AccessLevel.PACKAGE)
+    private              Path                                path;
 
     @Builder
     private static class RequestWork {
@@ -52,11 +58,12 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
     }
 
     @Builder
-    PaxosKeyValueEngine(@NonNull PaxosReplicateStateMachine rsm) {
+    PaxosKeyValueEngine(@NonNull Path path, @NonNull PaxosReplicateStateMachine rsm) {
+        this.path = path;
         this.rsm = rsm;
     }
 
-    public void start() {
+    public void start() throws Exception {
         worker = new Thread(this);
         worker.start();
     }
@@ -82,7 +89,7 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
                 try {
                     catchUp(proposal.getRound());
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    logger.error("catch up failed.", e);
                     f.complete(error(e));
                 }
                 int round = proposal.getRound();
@@ -99,9 +106,9 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
 
                 f.complete(resp);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                logger.error("thread interrupted.", e);
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.error("thread error.", e);
             }
         }
     }
@@ -121,6 +128,11 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
                 proprosal = rsm.proposal(cursor);
             }
 
+            if (!proprosal.isPresent()) {
+                rsm.propose(RespArray.with().toBytes());
+                throw new PreviousRequestNotFoundExcpetion("proposal for round " + round + "not exists,propose a empty array.");
+            }
+
             execute(cursor, proprosal.get());
         }
     }
@@ -129,6 +141,9 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
         RespDecoder decoder = new RespDecoder();
         decoder.decode(request);
         RespArray consensusReq = decoder.get();
+        if (consensusReq.size() == 0) {
+            return nullBulk();
+        }
         RespBulkString cmd = consensusReq.get(0);
         String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
         RespData ret = null;

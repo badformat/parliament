@@ -86,4 +86,28 @@ public class DefaultFileService implements FileService {
         }
     }
 
+    @Override
+    public Integer getInt(Path file) throws IOException {
+        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.WRITE)) {
+            ByteBuffer dst = ByteBuffer.allocate(16);
+            channel.read(dst);
+            dst.flip();
+            if (dst.limit() == 0) {
+                return null;
+            }
+            return dst.getInt();
+        }
+    }
+
+    @Override
+    public void writeInt(Path file, int i) throws IOException {
+        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.WRITE)) {
+            ByteBuffer dst = ByteBuffer.allocate(16);
+            dst.putInt(i);
+            dst.flip();
+            while (dst.hasRemaining()) {
+                channel.write(dst);
+            }
+        }
+    }
 }
