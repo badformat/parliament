@@ -72,9 +72,6 @@ class PaxosRsmConsensusTest {
     static void afterAll() throws Exception {
         for (PaxosReplicateStateMachine machine : machines) {
             machine.shutdown();
-        }
-        for (PaxosReplicateStateMachine machine : machines) {
-            machine.shutdown();
             Files.walk(machine.getProposalPersistenceService().getDataPath())
                     .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)

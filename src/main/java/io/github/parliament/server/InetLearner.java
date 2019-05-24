@@ -9,51 +9,52 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Optional;
 
-import io.github.parliament.paxos.Proposal;
 import lombok.Builder;
 import lombok.Builder.Default;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Builder
 public class InetLearner {
-    private volatile List<InetSocketAddress> others;
+    private static final Logger                  logger = LoggerFactory.getLogger(InetLearner.class);
+    private volatile     List<InetSocketAddress> others;
     @Default
-    private          ClientCodec             codec = new ClientCodec();
-    private          ProposalService         proposalService;
+    private              ClientCodec             codec  = new ClientCodec();
+    private              ProposalService         proposalService;
 
-    public boolean pullAll(int begin) {
+    public boolean syncFrom(int begin) {
         int max = 0;
         try {
             max = learnMax().stream().reduce(-1, (a, b) -> b > a ? b : a);
             proposalService.updateMaxRound(max);
             if (begin < max) {
-                pull(begin, max);
+                sync(begin, max);
             }
             return true;
         } catch (Exception e) {
-            //TODO
-            e.printStackTrace();
+            logger.error("syncFrom error:", e);
             return false;
         }
     }
 
-    public boolean pull(int round) {
+    public boolean sync(int round) {
         try {
-            pull(round, round);
+            sync(round, round);
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("sync error:", e);
             return false;
         }
     }
 
-    private void pull(int begin, int end) throws Exception {
+    private void sync(int begin, int end) throws Exception {
         BitSet bs = new BitSet(end - begin + 1);
         for (InetSocketAddress peer : others) {
             int round = begin;
             try (SocketChannel remote = SocketChannel.open(peer)) {
                 while (round <= end) {
                     int i = round - begin;
-                    if (!bs.get(i) && pull(remote, round)) {
+                    if (!bs.get(i) && sync(remote, round)) {
                         bs.set(i);
                         round++;
                     } else {
@@ -64,7 +65,7 @@ public class InetLearner {
         }
     }
 
-    private boolean pull(SocketChannel remote, int round) {
+    private boolean sync(SocketChannel remote, int round) {
         try {
             ByteBuffer cmd = codec.encodePull(round);
             while (cmd.hasRemaining()) {

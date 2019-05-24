@@ -31,18 +31,22 @@ import io.github.parliament.server.RemoteAcceptorSyncProxy;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
  * @author zy
  */
 public class PaxosReplicateStateMachine extends Paxos<String> implements AcceptorFactory<String> {
+    private static final Logger                                                    logger                = LoggerFactory.getLogger(
+            PaxosReplicateStateMachine.class);
     @Getter
-    private          ProposalPersistenceService                                proposalPersistenceService;
+    private              ProposalPersistenceService                                proposalPersistenceService;
     @Getter
-    private volatile InetSocketAddress                                         me;
-    private volatile List<InetSocketAddress>                                   others;
-    private volatile ConcurrentMap<InetSocketAddress, RemoteAcceptorSyncProxy> remoteAcceptorProxies = new MapMaker()
+    private volatile     InetSocketAddress                                         me;
+    private volatile     List<InetSocketAddress>                                   others;
+    private volatile     ConcurrentMap<InetSocketAddress, RemoteAcceptorSyncProxy> remoteAcceptorProxies = new MapMaker()
             .makeMap();
 
     private volatile LoadingCache<Integer, RsmLocalAcceptor> acceptorsCache;
@@ -51,6 +55,7 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
 
     private          PaxosSyncServer server;
     private volatile int             threadNo;
+    @Getter
     private volatile boolean         started = false;
 
     @Builder
@@ -92,34 +97,36 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
 
     public void start() throws Exception {
         synchronized (this) {
-            if (started) {
-                return;
-            }
+            Preconditions.checkState(!started, "already started");
             executorService = Executors.newFixedThreadPool(threadNo);
             server.start();
             started = true;
+            executorService.submit(() -> {
+                try {
+                    this.sync();
+                } catch (Exception e) {
+                    logger.error("sync paxos proposals failed.", e);
+                }
+            });
         }
-        this.pull();
     }
 
     public void shutdown() throws IOException {
         synchronized (this) {
-            if (!started) {
-                return;
-            }
+            Preconditions.checkState(started, "not started,can't shutdown.");
             server.shutdown();
             executorService.shutdown();
             started = false;
         }
     }
 
-    Callable<Boolean> pull() throws Exception {
+    Callable<Boolean> sync() throws Exception {
         int begin = maxRound();
-        return () -> learner.pullAll(begin);
+        return () -> learner.syncFrom(begin);
     }
 
-    public Future<Boolean> pull(int round) {
-        return executorService.submit(() -> learner.pull(round));
+    public Future<Boolean> sync(int round) {
+        return executorService.submit(() -> learner.sync(round));
     }
 
     public int nextRound() throws Exception {
@@ -147,6 +154,7 @@ public class PaxosReplicateStateMachine extends Paxos<String> implements Accepto
     }
 
     public Proposal propose(byte[] proposal) throws Exception {
+        Preconditions.checkState(started, "paxos server is not started.");
         return propose(nextRound(), proposal);
     }
 

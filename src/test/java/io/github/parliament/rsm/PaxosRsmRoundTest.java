@@ -59,8 +59,10 @@ class PaxosRsmRoundTest {
 
     @AfterEach
     void afterEach() throws Exception {
-        for (PaxosReplicateStateMachine peer : machines) {
-            peer.shutdown();
+        for (PaxosReplicateStateMachine machine : machines) {
+            if(machine.isStarted()) {
+                machine.shutdown();
+            }
         }
         for (PaxosReplicateStateMachine machine : machines) {
             Files.walk(machine.getProposalPersistenceService().getDataPath())
@@ -179,7 +181,7 @@ class PaxosRsmRoundTest {
             proposal.getAgreement().get();
         }
 
-        assertTrue(defer.pull().call());
+        assertTrue(defer.sync().call());
 
         assertEquals(localMachine.maxRound(), defer.maxRound());
     }

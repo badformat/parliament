@@ -71,9 +71,9 @@ class PaxosKeyValueEngineTest {
             machine.start();
         }
 
-        kv = PaxosKeyValueEngine.builder().rsm(me).path(me.getProposalPersistenceService().getDataPath().resolve("db"))
+        kv = PaxosKeyValueEngine.builder().rsm(me).path(me.getProposalPersistenceService().getDataPath().resolve("db1"))
                 .build();
-        kv2 = PaxosKeyValueEngine.builder().rsm(competitor).path(competitor.getProposalPersistenceService().getDataPath().resolve("db"))
+        kv2 = PaxosKeyValueEngine.builder().rsm(competitor).path(competitor.getProposalPersistenceService().getDataPath().resolve("db2"))
                 .build();
         kv.start();
         kv2.start();
@@ -84,7 +84,9 @@ class PaxosKeyValueEngineTest {
         kv.shutdown();
         kv2.shutdown();
         for (PaxosReplicateStateMachine machine : machines) {
-            machine.shutdown();
+            if (machine.isStarted()) {
+                machine.shutdown();
+            }
             Files.walk(machine.getProposalPersistenceService().getDataPath())
                     .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
@@ -124,22 +126,6 @@ class PaxosKeyValueEngineTest {
         assertEquals(RespInteger.with(1), kv.execute(request("del", key)).get());
     }
 
-    @Test
-    void putIfAbsent() throws Exception {
-        String key = "233";
-        String value = "239ghxxf";
-
-        RespInteger ok = (RespInteger) kv.execute(request("put", key, value)).get();
-        assertEquals(RespInteger.with(1), ok);
-
-        String newValue = "233333";
-        RespInteger resp = (RespInteger) kv.execute(request("putIfAbsent", key, newValue)).get();
-        assertEquals(RespInteger.with(0), resp);
-
-        RespBulkString getResp = (RespBulkString) kv.execute(request("get", key)).get();
-        assertEquals(RespBulkString.with(value.getBytes()), getResp);
-    }
-
     // parallel requests
     @Test
     void putDifferentKvsInParallel() {
@@ -166,9 +152,10 @@ class PaxosKeyValueEngineTest {
 
     /**
      * 保证实例间memtable一致
+     *
      */
     @Test
-    void memtableConsistency() {
+    void consistency() throws Exception {
         int limit = 20;
         Map<Integer, Future<RespData>> r1 = new ConcurrentHashMap<>();
         Map<Integer, Future<RespData>> r2 = new ConcurrentHashMap<>();
@@ -194,6 +181,8 @@ class PaxosKeyValueEngineTest {
             }
         }).collect(Collectors.toList());
 
+        assertEquals(kv.getRsm().round(), kv2.getRsm().round());
+
         noList.forEach((i) -> {
             String key = String.valueOf(i);
             try {
@@ -202,12 +191,44 @@ class PaxosKeyValueEngineTest {
                 fail(e);
             }
         });
-
-        assertEquals(kv.getMemtable(), kv2.getMemtable());
     }
 
-    //TODO cursor persistence
-    // TODO wal log
+    @Test
+    void recovery() throws Exception {
+        for (int i = 0; i < 20; i++) {
+            kv.execute(request("put", "" + i, "" + i)).get();
+        }
+        kv2.execute(request("get", "" + 1)).get();
+
+        kv2.shutdown();
+
+        for (int i = 0; i < 20; i++) {
+            kv.execute(request("put", "" + i, "" + i)).get();
+        }
+
+        kv2.start();
+        kv2.execute(request("get", "" + 1)).get();
+
+        for (int i = 0; i < 20; i++) {
+            assertEquals(kv.execute(request("get", "" + i)).get(), kv2.execute(request("get", "" + i)).get());
+        }
+    }
+
+    // cursor persistence
+    @Test
+    void cursor() throws Exception {
+        int times = 30;
+        for (int i = 0; i < times; i++) {
+            kv.execute(request("put", "key" + i, "value" + i)).get();
+        }
+        kv.shutdown();
+
+        kv = PaxosKeyValueEngine.builder().rsm(me).path(me.getProposalPersistenceService().getDataPath().resolve("db1"))
+                .build();
+        kv.start();
+    }
+
+    // TODO wal log.
     // TODO simple persistence key value store.
     // TODO dirty file
 

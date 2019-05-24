@@ -18,6 +18,11 @@ public class MemoryKeyValueEngine implements KeyValueEngine {
     private Map<RespBulkString, RespBulkString> kvs = new ConcurrentHashMap<>();
 
     @Override
+    public void start() throws Exception {
+
+    }
+
+    @Override
     public Future<RespData> execute(RespArray request) {
         RespBulkString c = request.get(0);
         String cmd = new String(c.getContent(), StandardCharsets.UTF_8);

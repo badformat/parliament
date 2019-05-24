@@ -10,5 +10,7 @@ import io.github.parliament.resp.RespData;
  * @author zy
  */
 interface KeyValueEngine {
+    void start() throws Exception;
+
     Future<RespData> execute(RespArray request) throws Exception;
 }
