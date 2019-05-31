@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 
+import io.github.parliament.KeyValueEngine;
 import io.github.parliament.files.DefaultFileService;
 import io.github.parliament.rsm.PaxosReplicateStateMachine;
 import io.github.parliament.rsm.ProposalPersistenceService;
@@ -32,7 +33,7 @@ public class KeyValueServer {
     private InetSocketAddress               socketAddress;
     private AsynchronousServerSocketChannel serverSocketChannel;
     private AsynchronousChannelGroup        channelGroup;
-    private KeyValueEngine                  keyValueEngine;
+    private KeyValueEngine keyValueEngine;
 
     @Builder
     public KeyValueServer(@NonNull InetSocketAddress socketAddress, @NonNull KeyValueEngine keyValueEngine) throws Exception {

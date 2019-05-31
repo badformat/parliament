@@ -1,4 +1,4 @@
-package io.github.parliament.kv;
+package io.github.parliament;
 
 import java.util.concurrent.Future;
 
@@ -9,7 +9,7 @@ import io.github.parliament.resp.RespData;
  *
  * @author zy
  */
-interface KeyValueEngine {
+public interface KeyValueEngine {
     void start() throws Exception;
 
     Future<RespData> execute(RespArray request) throws Exception;

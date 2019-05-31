@@ -18,6 +18,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
+import io.github.parliament.KeyValueEngine;
 import io.github.parliament.paxos.Proposal;
 import io.github.parliament.resp.RespArray;
 import io.github.parliament.resp.RespBulkString;
