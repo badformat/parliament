@@ -1,4 +1,4 @@
-package io.github.parliament.kv;
+package io.github.parliament.page;
 
 import java.nio.ByteBuffer;
 

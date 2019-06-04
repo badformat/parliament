@@ -7,7 +7,7 @@ import java.util.concurrent.ExecutorService;
 import com.google.common.collect.MapMaker;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.proposer.Proposer;
-import io.github.parliament.paxos.proposer.Sequence;
+import io.github.parliament.Sequence;
 import lombok.Getter;
 
 public abstract class Paxos<T extends Comparable<T>> {

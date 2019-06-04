@@ -18,7 +18,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Preconditions;
+import io.github.parliament.DuplicateKeyException;
 import io.github.parliament.KeyValueEngine;
+import io.github.parliament.page.Pager;
 import io.github.parliament.paxos.Proposal;
 import io.github.parliament.resp.RespArray;
 import io.github.parliament.resp.RespBulkString;
@@ -46,7 +48,7 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
     @Getter(AccessLevel.PACKAGE)
     private volatile     PaxosReplicateStateMachine rsm;
     @Getter(AccessLevel.PACKAGE)
-    private              Pager                      pager;
+    private Pager pager;
     @Getter(AccessLevel.PACKAGE)
     private volatile     int                        cursor  = 0;
     private volatile     BlockingQueue<RequestWork> works   = new ArrayBlockingQueue<>(200);
@@ -139,7 +141,7 @@ public class PaxosKeyValueEngine implements KeyValueEngine, Runnable {
                 } else {
                     execute(round, value);
                     logger.info("共识冲突 {}", round);
-                    resp = RespError.withUTF8("consensus collision occurs.Please check and retry.");
+                    resp = RespError.withUTF8("content collision occurs.Please check and retry.");
                 }
 
                 f.complete(resp);

@@ -1,4 +1,7 @@
-package io.github.parliament.kv;
+package io.github.parliament.page;
+
+import io.github.parliament.DuplicateKeyException;
+import lombok.EqualsAndHashCode;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -7,22 +10,19 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import lombok.EqualsAndHashCode;
-
 /**
- *
  * @author zy
  */
 @EqualsAndHashCode
 class Page {
-    private static final int OFFSET      = 4;
-    private static final int PRE_OFFSET  = 4;
+    private static final int OFFSET = 4;
+    private static final int PRE_OFFSET = 4;
     private static final int NEXT_OFFSET = 4;
-    private static final int RECORD_NO   = 2;
+    private static final int RECORD_NO = 2;
     private static final int RECORD_HEAD = 3;
 
     private List<Record> records = new ArrayList<>();
-    private int          size;
+    private int size;
 
     Page(ByteBuffer buffer, int size) {
         this.size = size;
@@ -61,6 +61,23 @@ class Page {
             }
         }
         records.add(new Record((byte) 0, key, value));
+    }
+
+    boolean containsKey(byte[] key) {
+        for (Record record : records) {
+            ByteBuffer buffer = ByteBuffer.wrap(record.bytes());
+            int s = buffer.getShort();
+            if (s != key.length) {
+                continue;
+            }
+
+            byte[] k = new byte[s];
+            buffer.get(k, 0, s);
+            if (Arrays.equals(key, k)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     byte[] get(byte[] key) {

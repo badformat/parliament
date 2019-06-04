@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
 import com.google.common.base.Preconditions;
+import io.github.parliament.Sequence;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.Prepare;
@@ -18,7 +19,7 @@ import io.github.parliament.paxos.acceptor.Prepare;
 public class Proposer<T extends Comparable<T>> {
     private Collection<Acceptor<T>> acceptors;
     private int                     majority = Integer.MAX_VALUE;
-    private Sequence<T>             sequence;
+    private Sequence<T> sequence;
     private boolean                 decided  = false;
     private T                       n;
     private byte[]                  agreement;

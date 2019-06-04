@@ -85,14 +85,16 @@ public class RespDecoder {
         return new RespDecoder();
     }
 
-    public void decode(byte[] bytes) {
+    public RespDecoder decode(byte[] bytes) {
         byteBuf.writeBytes(bytes);
         decode0();
+        return this;
     }
 
-    public void decode(ByteBuffer buf) {
+    public RespDecoder decode(ByteBuffer buf) {
         byteBuf.writeBytes(buf);
         decode0();
+        return this;
     }
 
     private void decode0() {

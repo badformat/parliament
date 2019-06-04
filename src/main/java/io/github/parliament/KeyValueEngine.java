@@ -9,6 +9,7 @@ import io.github.parliament.resp.RespData;
  *
  * @author zy
  */
+@Deprecated
 public interface KeyValueEngine {
     void start() throws Exception;
 

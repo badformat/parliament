@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import io.github.parliament.Sequence;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -20,7 +21,7 @@ class ProposerTest {
     private Proposer<String>       proposer;
     private List<Acceptor<String>> acceptors = new ArrayList<Acceptor<String>>();
     @Mock
-    private Sequence<String>       seqNoGenerator;
+    private Sequence<String> seqNoGenerator;
     @Mock
     private Acceptor<String>       acc1;
     @Mock
