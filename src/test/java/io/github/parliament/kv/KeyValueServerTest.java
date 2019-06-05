@@ -1,5 +1,13 @@
 package io.github.parliament.kv;
 
+import io.github.parliament.Persistence;
+import io.github.parliament.ReplicateStateMachine;
+import io.github.parliament.State;
+import io.github.parliament.resp.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -7,28 +15,37 @@ import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
-import io.github.parliament.KeyValueEngine;
-import io.github.parliament.resp.RespArray;
-import io.github.parliament.resp.RespBulkString;
-import io.github.parliament.resp.RespData;
-import io.github.parliament.resp.RespDecoder;
-import io.github.parliament.resp.RespError;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class KeyValueServerTest {
     private static KeyValueServer server;
-    private static SocketChannel  client;
-    private static RespDecoder    respDecoder = RespDecoder.create();
+    private static SocketChannel client;
+    private static RespDecoder respDecoder = RespDecoder.create();
+    private static State state = mock(State.class);
 
     @BeforeAll
     static void beforeAll() throws Exception {
-        KeyValueEngine memKeyValueEngine = new MemoryKeyValueEngine();
+        ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
+        KeyValueEngine memKeyValueEngine = MemoryKeyValueEngine.builder()
+                .executorService(mock(ExecutorService.class))
+                .persistence(mock(Persistence.class))
+                .rsm(rsm)
+                .build();
+
+        when(state.getOutput()).thenReturn(RespInteger.with(1).toBytes());
+        when(state.getId()).thenReturn(1);
+        when(state.getUuid()).thenReturn("uuid".getBytes());
+        when(rsm.state(any())).thenReturn(state);
+
+        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(state));
 
         server = KeyValueServer.builder()
                 .socketAddress(new InetSocketAddress("127.0.0.1", 30000))
@@ -52,8 +69,9 @@ class KeyValueServerTest {
     @Test
     void handlePutRequest() throws IOException {
         sendReq("put", "any key", "any value");
-
-        assertEquals(RespBulkString.with("any value".getBytes()), receiveResp());
+        RespBulkString expected = RespBulkString.with("any value".getBytes());
+        when(state.getOutput()).thenReturn(expected.toBytes());
+        assertEquals(expected, receiveResp());
     }
 
     @Test
@@ -64,10 +82,14 @@ class KeyValueServerTest {
 
     @Test
     void handleGet() throws IOException {
+        RespBulkString expected = RespBulkString.with("value1".getBytes());
+        when(state.getOutput()).thenReturn(expected.toBytes());
+
         sendReq("put", "key1", "value1");
         receiveResp();
         sendReq("get", "key1");
-        assertEquals(RespBulkString.with("value1".getBytes()), receiveResp());
+
+        assertEquals(expected, receiveResp());
     }
 
     @Test

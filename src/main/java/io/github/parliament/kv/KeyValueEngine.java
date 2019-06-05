@@ -43,25 +43,21 @@ import java.util.concurrent.Future;
  *
  * @author zy
  */
-public class KeyValueEngineImpl implements EventProcessor {
-    private static final Logger logger = LoggerFactory.getLogger(KeyValueEngineImpl.class);
+public class KeyValueEngine implements EventProcessor {
+    private static final Logger logger = LoggerFactory.getLogger(KeyValueEngine.class);
     private static final String PUT_CMD = "put";
     private static final String GET_CMD = "get";
     private static final String DEL_CMD = "del";
     private ExecutorService executorService;
-    private Path path;
     @Getter(AccessLevel.PACKAGE)
     private Persistence persistence;
     @Getter(AccessLevel.PACKAGE)
     private ReplicateStateMachine rsm;
 
     @Builder
-    KeyValueEngineImpl(@NonNull Path path,
-                       @NonNull ExecutorService executorService,
-                       @NonNull ReplicateStateMachine rsm,
-                       Persistence persistence)
-            throws IOException {
-        this.path = path;
+    KeyValueEngine(@NonNull ExecutorService executorService,
+                   @NonNull ReplicateStateMachine rsm,
+                   @NonNull Persistence persistence) {
         this.executorService = executorService;
         this.rsm = rsm;
         this.persistence = persistence;

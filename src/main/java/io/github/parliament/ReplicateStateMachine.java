@@ -2,10 +2,7 @@ package io.github.parliament;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.MapMaker;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NonNull;
+import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,28 +32,29 @@ import java.util.concurrent.*;
  *
  * @author zy
  */
-@Builder
 public class ReplicateStateMachine implements Runnable {
     static final byte[] RSM_DONE_REDO = "rsm_done_redo".getBytes();
     static final byte[] RSM_DONE = "rsm_done".getBytes();
 
     private static final Logger logger = LoggerFactory.getLogger(ReplicateStateMachine.class);
-    @NonNull
+    @Setter(AccessLevel.PACKAGE)
     private EventProcessor eventProcessor;
-    @NonNull
     @Getter(AccessLevel.PACKAGE)
     private Persistence persistence;
-    @NonNull
     private Sequence<Integer> sequence;
-    @NonNull
     private Coordinator coordinator;
-    @Builder.Default
     private volatile Integer done = -1;
-    @Builder.Default
     private volatile Integer max = -1;
-
-    @Builder.Default
     private ConcurrentMap<Integer, CompletableFuture<State>> futures = new MapMaker().weakValues().makeMap();
+
+    @Builder
+    private ReplicateStateMachine(@NonNull Persistence persistence,
+                                  @NonNull Sequence<Integer> sequence,
+                                  @NonNull Coordinator coordinator) {
+        this.persistence = persistence;
+        this.sequence = sequence;
+        this.coordinator = coordinator;
+    }
 
     public void start(EventProcessor processor, Executor executor) throws IOException {
         this.eventProcessor = processor;

@@ -6,7 +6,6 @@ import java.nio.channels.CompletionHandler;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import io.github.parliament.KeyValueEngine;
 import io.github.parliament.resp.RespArray;
 import io.github.parliament.resp.RespDecoder;
 import io.github.parliament.resp.RespError;
@@ -50,7 +49,7 @@ class ClientHandler implements CompletionHandler<Integer, KeyValueEngine> {
 
             RespArray cmd = respDecoder.get();
             if (cmd != null) {
-                ByteBuffer bb = engine.execute(cmd).get(timeOutMs, TimeUnit.MILLISECONDS).toByteBuffer();
+                ByteBuffer bb = engine.execute(cmd.toBytes()).get(timeOutMs, TimeUnit.MILLISECONDS).toByteBuffer();
                 while (bb.hasRemaining()) {
                     channel.write(bb);
                 }

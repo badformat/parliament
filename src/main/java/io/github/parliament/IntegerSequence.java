@@ -2,7 +2,7 @@ package io.github.parliament;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-class IntegerSequence implements Sequence<Integer> {
+public class IntegerSequence implements Sequence<Integer> {
     private AtomicInteger atomicInteger = new AtomicInteger();
 
     @Override

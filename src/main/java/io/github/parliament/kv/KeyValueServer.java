@@ -1,5 +1,13 @@
 package io.github.parliament.kv;
 
+import io.github.parliament.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NonNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.AsynchronousChannelGroup;
@@ -9,36 +17,27 @@ import java.nio.channels.CompletionHandler;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import io.github.parliament.KeyValueEngine;
-import io.github.parliament.files.DefaultFileService;
-import io.github.parliament.rsm.PaxosReplicateStateMachine;
-import io.github.parliament.rsm.ProposalPersistenceService;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NonNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.concurrent.Future;
 
 /**
- *
  * @author zy
  */
 public class KeyValueServer {
     private static final Logger logger = LoggerFactory.getLogger(KeyValueServer.class);
 
     @Getter(AccessLevel.PACKAGE)
-    private InetSocketAddress               socketAddress;
+    private InetSocketAddress socketAddress;
     private AsynchronousServerSocketChannel serverSocketChannel;
-    private AsynchronousChannelGroup        channelGroup;
-    private KeyValueEngine keyValueEngine;
+    private AsynchronousChannelGroup channelGroup;
+    private KeyValueEngine engine;
 
     @Builder
-    public KeyValueServer(@NonNull InetSocketAddress socketAddress, @NonNull KeyValueEngine keyValueEngine) throws Exception {
+    public KeyValueServer(@NonNull InetSocketAddress socketAddress,
+                          @NonNull KeyValueEngine keyValueEngine) {
         this.socketAddress = socketAddress;
-        this.keyValueEngine = keyValueEngine;
+        this.engine = keyValueEngine;
     }
 
     public void start() throws Exception {
@@ -50,7 +49,7 @@ public class KeyValueServer {
             public void completed(AsynchronousSocketChannel channel, Object attachment) {
                 serverSocketChannel.accept(attachment, this);
                 ClientHandler clientHandler = new ClientHandler(channel);
-                channel.read(clientHandler.getByteBuffer(), keyValueEngine, clientHandler);
+                channel.read(clientHandler.getByteBuffer(), engine, clientHandler);
             }
 
             @Override
@@ -59,7 +58,7 @@ public class KeyValueServer {
             }
         });
 
-        keyValueEngine.start();
+        engine.start();
     }
 
     public void shutdown() throws IOException {
@@ -80,24 +79,56 @@ public class KeyValueServer {
         prop = System.getProperty("kv");
         InetSocketAddress kv = getInetSocketAddress(prop);
 
-        ProposalPersistenceService proposalService = ProposalPersistenceService
-                .builder()
-                .fileService(new DefaultFileService())
-                .path(Paths.get(dir))
+//        ProposalPersistenceService proposalService = ProposalPersistenceService
+//                .builder()
+//                .fileService(new DefaultFileService())
+//                .path(Paths.get(dir))
+//                .build();
+//
+//        PaxosReplicateStateMachine machine = PaxosReplicateStateMachine
+//                .builder()
+//                .me(me)
+//                .peers(peers)
+//                .proposalPersistenceService(proposalService)
+//                .threadNo(20)
+//                .build();
+//
+//        machine.start();
+//        logger.info("本地paxos服务启动成功，地址：" + me);
+
+        @NonNull Persistence pager = PagePersistence.builder().path(Paths.get(dir).resolve("db")).build();
+        @NonNull ExecutorService executorService = Executors.newFixedThreadPool(200);
+        @NonNull Coordinator coordinator = new Coordinator() {
+            @Override
+            public void coordinate(int id, byte[] content) {
+
+            }
+
+            @Override
+            public Future<byte[]> instance(int id) {
+                return null;
+            }
+
+            @Override
+            public int max() {
+                return 0;
+            }
+
+            @Override
+            public void forget(int before) {
+
+            }
+        };
+        @NonNull ReplicateStateMachine rsm = ReplicateStateMachine.builder()
+                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("rsm")).build())
+                .sequence(new IntegerSequence())
+                .coordinator(coordinator)
                 .build();
-
-        PaxosReplicateStateMachine machine = PaxosReplicateStateMachine
-                .builder()
-                .me(me)
-                .peers(peers)
-                .proposalPersistenceService(proposalService)
-                .threadNo(20)
+        KeyValueEngine keyValueEngine = KeyValueEngine.builder()
+                .persistence(pager)
+                .executorService(executorService)
+                .rsm(rsm)
                 .build();
-
-        machine.start();
-        logger.info("本地paxos服务启动成功，地址：" + me);
-
-        KeyValueEngine keyValueEngine = PaxosKeyValueEngine.builder().path(Paths.get(dir).resolve("db")).rsm(machine).build();
 
         KeyValueServer server = KeyValueServer.builder().socketAddress(kv).keyValueEngine(keyValueEngine).build();
         server.start();

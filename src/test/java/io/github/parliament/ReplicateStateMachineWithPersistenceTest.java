@@ -32,13 +32,14 @@ class ReplicateStateMachineWithPersistenceTest {
         PagePersistence persistence = PagePersistence.builder().path(Paths.get(path)).build();
         Sequence<Integer> sequence = new IntegerSequence();
         MockCoordinator coordinator = new MockCoordinator();
-        return ReplicateStateMachine
+        ReplicateStateMachine ret = ReplicateStateMachine
                 .builder()
-                .eventProcessor(processor)
                 .persistence(persistence)
                 .coordinator(coordinator)
                 .sequence(sequence)
                 .build();
+        ret.setEventProcessor(processor);
+        return ret;
     }
 
     @AfterAll

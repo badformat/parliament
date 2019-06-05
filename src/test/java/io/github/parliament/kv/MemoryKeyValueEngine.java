@@ -1,30 +1,42 @@
 package io.github.parliament.kv;
 
+import io.github.parliament.Persistence;
+import io.github.parliament.ReplicateStateMachine;
+import io.github.parliament.resp.RespArray;
+import io.github.parliament.resp.RespBulkString;
+import io.github.parliament.resp.RespData;
+import io.github.parliament.resp.RespDecoder;
+import lombok.NonNull;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
-import io.github.parliament.KeyValueEngine;
-import io.github.parliament.resp.RespArray;
-import io.github.parliament.resp.RespBulkString;
-import io.github.parliament.resp.RespData;
-
 /**
- *
  * @author zy
  */
-public class MemoryKeyValueEngine implements KeyValueEngine {
+public class MemoryKeyValueEngine extends KeyValueEngine {
     private Map<RespBulkString, RespBulkString> kvs = new ConcurrentHashMap<>();
 
+    MemoryKeyValueEngine(@NonNull ExecutorService executorService,
+                         @NonNull ReplicateStateMachine rsm,
+                         @NonNull Persistence persistence) {
+        super(executorService, rsm, persistence);
+    }
+
     @Override
-    public void start() throws Exception {
+    public void start() {
 
     }
 
     @Override
-    public Future<RespData> execute(RespArray request) {
+    public Future<RespData> execute(byte[] bytes) {
+        RespDecoder decoder = new RespDecoder();
+        decoder.decode(bytes);
+        RespArray request = decoder.get();
         RespBulkString c = request.get(0);
         String cmd = new String(c.getContent(), StandardCharsets.UTF_8);
         switch (cmd) {

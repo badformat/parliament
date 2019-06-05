@@ -5,7 +5,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,11 +26,11 @@ class ReplicateStateMachineTest {
     void setUp() {
         rsm = ReplicateStateMachine
                 .builder()
-                .eventProcessor(processor)
                 .persistence(persistence)
                 .coordinator(coordinator)
                 .sequence(sequence)
                 .build();
+        rsm.setEventProcessor(processor);
     }
 
     @AfterEach
@@ -83,7 +86,7 @@ class ReplicateStateMachineTest {
                     return n;
                 }).toArray();
 
-        while(rsm.done() < 99) {
+        while (rsm.done() < 99) {
             Thread.sleep(2);
         }
         assertEquals(99, rsm.max());

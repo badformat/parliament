@@ -27,8 +27,8 @@ import static org.mockito.Mockito.when;
 /**
  * @author zy
  */
-class KeyValueEngineImplTest {
-    private KeyValueEngineImpl keyValueEngine;
+class KeyValueEngineTest {
+    private KeyValueEngine keyValueEngine;
     private Path path = Paths.get("./test");
     private ExecutorService executorService = mock(ExecutorService.class);
     private Persistence persistence;
@@ -38,8 +38,7 @@ class KeyValueEngineImplTest {
     void beforeEach() throws IOException {
 
         persistence = new MockPersistence();
-        keyValueEngine = KeyValueEngineImpl.builder()
-                .path(path)
+        keyValueEngine = KeyValueEngine.builder()
                 .executorService(executorService)
                 .persistence(persistence)
                 .rsm(rsm)
