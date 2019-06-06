@@ -1,13 +1,5 @@
 package io.github.parliament.kv;
 
-import io.github.parliament.Coordinator;
-import io.github.parliament.IntegerSequence;
-import io.github.parliament.PagePersistence;
-import io.github.parliament.ReplicateStateMachine;
-import io.github.parliament.paxos.Paxos;
-import io.github.parliament.paxos.TimestampSequence;
-import io.github.parliament.paxos.client.InetPeerAcceptors;
-import io.github.parliament.paxos.client.PeerAcceptors;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -21,10 +13,6 @@ import java.nio.channels.AsynchronousChannelGroup;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
@@ -32,7 +20,6 @@ import java.util.concurrent.Executors;
  */
 public class KeyValueServer {
     private static final Logger logger = LoggerFactory.getLogger(KeyValueServer.class);
-
     @Getter(AccessLevel.PACKAGE)
     private InetSocketAddress socketAddress;
     private AsynchronousServerSocketChannel serverSocketChannel;
@@ -47,6 +34,7 @@ public class KeyValueServer {
     }
 
     public void start() throws Exception {
+        engine.start();
         channelGroup = AsynchronousChannelGroup.withFixedThreadPool(20, Executors.defaultThreadFactory());
         serverSocketChannel = AsynchronousServerSocketChannel.open(channelGroup);
         serverSocketChannel.bind(socketAddress);
@@ -60,70 +48,13 @@ public class KeyValueServer {
 
             @Override
             public void failed(Throwable exc, Object attachment) {
-
+                logger.error("kv server error.", exc);
             }
         });
-
-        engine.start();
     }
 
     public void shutdown() throws IOException {
         channelGroup.shutdown();
         serverSocketChannel.close();
     }
-
-    public static void main(String[] args) throws Exception {
-        String prop = System.getProperty("PeerAcceptors");
-        List<InetSocketAddress> peers = getPeers(prop);
-
-        prop = System.getProperty("me");
-        InetSocketAddress me = getInetSocketAddress(prop);
-
-        prop = System.getProperty("dir");
-        String dir = prop;
-
-        prop = System.getProperty("kv");
-        InetSocketAddress kv = getInetSocketAddress(prop);
-
-        @NonNull ExecutorService executorService = Executors.newFixedThreadPool(200);
-        @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(20).build();
-        @NonNull Coordinator coordinator = Paxos.builder()
-                .executorService(executorService)
-                .peerAcceptors(acceptors)
-                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("paxos")).build())
-                .sequence(new TimestampSequence())
-                .build();
-
-        @NonNull ReplicateStateMachine rsm = ReplicateStateMachine.builder()
-                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("rsm")).build())
-                .sequence(new IntegerSequence())
-                .coordinator(coordinator)
-                .build();
-
-        KeyValueEngine keyValueEngine = KeyValueEngine.builder()
-                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("db")).build())
-                .executorService(executorService)
-                .rsm(rsm)
-                .build();
-
-        KeyValueServer server = KeyValueServer.builder().socketAddress(kv).keyValueEngine(keyValueEngine).build();
-        server.start();
-        logger.info("本地kv服务启动成功，地址：" + kv);
-    }
-
-    static List<InetSocketAddress> getPeers(String prop) {
-        String[] peers = prop.split(",");
-        List<InetSocketAddress> peerAddrs = new ArrayList<>();
-        for (String peer : peers) {
-            String[] ipAndPort = peer.split(":");
-            peerAddrs.add(new InetSocketAddress(ipAndPort[0], Integer.valueOf(ipAndPort[1])));
-        }
-        return peerAddrs;
-    }
-
-    static InetSocketAddress getInetSocketAddress(String prop) {
-        String[] ipAndPort = prop.split(":");
-        return new InetSocketAddress(ipAndPort[0], Integer.valueOf(ipAndPort[1]));
-    }
-
 }

@@ -82,7 +82,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>io.github.parliament.kv.KeyValueServer</mainClass>
+                            <mainClass>io.github.parliament.Application</mainClass>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>dependencies/</classpathPrefix>
                         </manifest>

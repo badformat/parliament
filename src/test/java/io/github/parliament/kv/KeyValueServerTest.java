@@ -1,5 +1,6 @@
 package io.github.parliament.kv;
 
+import io.github.parliament.Application;
 import io.github.parliament.Persistence;
 import io.github.parliament.ReplicateStateMachine;
 import io.github.parliament.State;
@@ -94,13 +95,13 @@ class KeyValueServerTest {
 
     @Test
     void getPeers() {
-        List<InetSocketAddress> peers = KeyValueServer.getPeers("127.0.0.1:50000,127.0.0.1:50001,127.0.0.1:50002");
+        List<InetSocketAddress> peers = Application.getPeers("127.0.0.1:50000,127.0.0.1:50001,127.0.0.1:50002");
         assertEquals(3, peers.size());
     }
 
     @Test
     void getMe() {
-        assertEquals(new InetSocketAddress("127.0.0.1", 50002), KeyValueServer.getInetSocketAddress("127.0.0.1:50002"));
+        assertEquals(new InetSocketAddress("127.0.0.1", 50002), Application.getInetSocketAddress("127.0.0.1:50002"));
     }
 
     private void sendReq(String cmd, String... args) throws IOException {
