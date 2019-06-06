@@ -1,4 +1,4 @@
-package io.github.parliament.server;
+package io.github.parliament.paxos.client;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -8,7 +8,6 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.google.common.base.Preconditions;
-import io.github.parliament.paxos.Proposal;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Prepare;
 import io.github.parliament.resp.RespArray;
@@ -17,7 +16,6 @@ import io.github.parliament.resp.RespError;
 import io.github.parliament.resp.RespInteger;
 import io.github.parliament.resp.RespSimpleString;
 import io.github.parliament.resp.RespParser;
-import org.checkerframework.checker.nullness.Opt;
 
 /**
  *
@@ -69,7 +67,7 @@ class ClientCodec {
         return RespArray.with(cmd, r).toByteBuffer();
     }
 
-    Prepare<String> decodePrepare(ByteChannel remote, String n) throws IOException {
+    Prepare decodePrepare(ByteChannel remote, String n) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.get(0) instanceof RespError) {
@@ -91,7 +89,7 @@ class ClientCodec {
         return Prepare.reject(rn);
     }
 
-    Accept<String> decodeAccept(ByteChannel remote, String n) throws IOException {
+    Accept decodeAccept(ByteChannel remote, String n) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.get(0) instanceof RespError) {

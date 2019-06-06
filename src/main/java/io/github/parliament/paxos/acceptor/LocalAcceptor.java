@@ -6,37 +6,45 @@ import lombok.ToString;
 
 @EqualsAndHashCode
 @ToString
-public abstract class LocalAcceptor<T extends Comparable<T>> implements Acceptor<T> {
+public abstract class LocalAcceptor implements Acceptor {
     @Getter
-    private T      np;
+    protected int round;
     @Getter
-    private T      na;
+    private String np;
+    @Getter
+    private String na;
     @Getter
     private byte[] va;
 
-    @Override
-    public Prepare<T> prepare(T n) {
-        if (np == null || n.compareTo(np) >= 0) {
-            np = n;
-            return Prepare.<T>ok(n, na, va);
-        }
-        return Prepare.<T>reject(n);
+    public LocalAcceptor(int round) {
+        this.round = round;
     }
 
     @Override
-    public Accept<T> accept(T n, byte[] value) {
+    public Prepare prepare(String n) {
+        if (np == null || n.compareTo(np) >= 0) {
+            np = n;
+            return Prepare.ok(n, na, va);
+        }
+        return Prepare.reject(n);
+    }
+
+    @Override
+    public Accept accept(String n, byte[] value) {
         if (np == null) {
-            return Accept.<T>reject(n);
+            return Accept.reject(n);
         }
         if (n.compareTo(np) >= 0) {
             np = n;
             na = n;
             va = value;
-            return Accept.<T>ok(n);
+            return Accept.ok(n);
         }
-        return Accept.<T>reject(n);
+        return Accept.reject(n);
     }
 
     @Override
     abstract public void decide(byte[] agreement) throws Exception;
+
+    abstract public void failed(String error);
 }

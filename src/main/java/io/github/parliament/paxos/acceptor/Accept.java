@@ -1,10 +1,10 @@
 package io.github.parliament.paxos.acceptor;
 
-public class Accept<T extends Comparable<T>> {
+public class Accept {
     private boolean ok;
-    private T n;
+    private String n;
 
-    private Accept(T n, boolean ok) {
+    private Accept(String n, boolean ok) {
         this.n = n;
         this.ok = ok;
     }
@@ -17,19 +17,19 @@ public class Accept<T extends Comparable<T>> {
         this.ok = ok;
     }
 
-    public T getN() {
+    public String getN() {
         return n;
     }
 
-    void setN(T n) {
+    void setN(String n) {
         this.n = n;
     }
 
-    public static <T2 extends Comparable<T2>> Accept<T2> ok(T2 n) {
-        return new Accept<>(n, true);
+    public static Accept ok(String n) {
+        return new Accept(n, true);
     }
 
-    public static <T2 extends Comparable<T2>> Accept<T2> reject(T2 n) {
-        return new Accept<>(n, false);
+    public static Accept reject(String n) {
+        return new Accept(n, false);
     }
 }

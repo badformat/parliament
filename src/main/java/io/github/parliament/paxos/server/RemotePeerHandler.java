@@ -1,34 +1,37 @@
-package io.github.parliament.server;
+package io.github.parliament.paxos.server;
+
+import io.github.parliament.Coordinator;
+import io.github.parliament.paxos.acceptor.Accept;
+import io.github.parliament.paxos.acceptor.Acceptor;
+import io.github.parliament.paxos.acceptor.LocalAcceptors;
+import io.github.parliament.paxos.acceptor.Prepare;
+import io.github.parliament.paxos.server.ServerCodec.Request;
+import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.Optional;
 
-import io.github.parliament.paxos.acceptor.Accept;
-import io.github.parliament.paxos.acceptor.Acceptor;
-import io.github.parliament.paxos.acceptor.AcceptorFactory;
-import io.github.parliament.paxos.acceptor.Prepare;
-import io.github.parliament.server.ServerCodec.Request;
-import lombok.Getter;
-
 /**
- *
  * @author zy
  */
 public class RemotePeerHandler extends Thread {
+    private static final Logger logger = LoggerFactory.getLogger(RemotePeerHandler.class);
     @Getter
     private SocketChannel clientChannel;
 
-    private volatile AcceptorFactory<String> acceptorFactory;
-    private          ProposalService         proposalService;
+    private volatile LocalAcceptors localAcceptors;
+    private Coordinator coordinator;
 
     private ServerCodec codec = new ServerCodec();
 
-    RemotePeerHandler(SocketChannel clientChannel, AcceptorFactory<String> acceptorFactory, ProposalService proposalService) {
+    RemotePeerHandler(SocketChannel clientChannel, LocalAcceptors localAcceptors, Coordinator coordinator) {
         this.clientChannel = clientChannel;
-        this.acceptorFactory = acceptorFactory;
-        this.proposalService = proposalService;
+        this.localAcceptors = localAcceptors;
+        this.coordinator = coordinator;
     }
 
     @Override
@@ -40,18 +43,18 @@ public class RemotePeerHandler extends Thread {
                 }
                 Request req = codec.decode(clientChannel);
                 ByteBuffer src;
-                Acceptor<String> acceptor = acceptorFactory.createLocalAcceptorFor(
+                Acceptor acceptor = localAcceptors.create(
                         req.getRound());
                 switch (req.getCmd()) {
                     case prepare:
-                        Prepare<String> resp = acceptor.prepare(req.getN());
+                        Prepare resp = acceptor.prepare(req.getN());
                         src = codec.encodePrepare(resp);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
                         break;
                     case accept:
-                        Accept<String> acc = acceptor.accept(req.getN(), req.getV());
+                        Accept acc = acceptor.accept(req.getN(), req.getV());
                         src = codec.encodeAccept(acc);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
@@ -65,14 +68,14 @@ public class RemotePeerHandler extends Thread {
                         }
                         break;
                     case max:
-                        int max = proposalService.maxRound();
+                        int max = coordinator.max();
                         src = codec.encodeInt(max);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
                         break;
                     case min:
-                        int min = proposalService.minRound();
+                        int min = coordinator.min();
                         src = codec.encodeInt(min);
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
@@ -80,8 +83,8 @@ public class RemotePeerHandler extends Thread {
                         break;
                     case pull:
                         int rn = req.getRound();
-                        Optional<byte[]> p = proposalService.getProposal(rn);
-                        src = codec.encodeProposal(rn, p);
+                        byte[] p = coordinator.get(rn);
+                        src = codec.encodeProposal(rn, Optional.ofNullable(p));
                         while (src.hasRemaining()) {
                             clientChannel.write(src);
                         }
@@ -92,14 +95,14 @@ public class RemotePeerHandler extends Thread {
 
             } while (true);
         } catch (Exception e) {
-            //e.printStackTrace();
+            logger.error("fail in remote peer.", e);
         }
 
         if (clientChannel.isConnected()) {
             try {
                 clientChannel.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.error("fail in remote peer close.", e);
             }
         }
     }

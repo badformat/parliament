@@ -1,4 +1,8 @@
-package io.github.parliament.server;
+package io.github.parliament.paxos.server;
+
+import io.github.parliament.Coordinator;
+import io.github.parliament.paxos.acceptor.LocalAcceptors;
+import lombok.Builder;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -11,30 +15,26 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import io.github.parliament.paxos.acceptor.AcceptorFactory;
-import lombok.Builder;
-
 /**
- *
  * @author zy
  */
 public class PaxosSyncServer implements Runnable {
-    private volatile boolean                 started = false;
-    private volatile InetSocketAddress       me;
-    private volatile ServerSocketChannel     ssc;
-    private volatile Thread                  selectorThread;
-    private volatile ExecutorService         executorService;
-    private volatile AcceptorFactory<String> acceptorFactory;
-    private volatile ProposalService         proposalService;
-    private volatile int                     peersNo;
-    private volatile List<SocketChannel>     clients;
+    private volatile boolean started = false;
+    private volatile InetSocketAddress me;
+    private volatile ServerSocketChannel ssc;
+    private volatile Thread selectorThread;
+    private volatile ExecutorService executorService;
+    private volatile LocalAcceptors localAcceptors;
+    private volatile Coordinator coordinator;
+    private volatile int peersNo;
+    private volatile List<SocketChannel> clients;
 
     @Builder
-    public PaxosSyncServer(InetSocketAddress me, AcceptorFactory<String> acceptorFactory, ProposalService proposalService,
+    public PaxosSyncServer(InetSocketAddress me, LocalAcceptors localAcceptors, Coordinator coordinator,
                            int peersNo) {
         this.me = me;
-        this.acceptorFactory = acceptorFactory;
-        this.proposalService = proposalService;
+        this.localAcceptors = localAcceptors;
+        this.coordinator = coordinator;
         this.peersNo = peersNo;
         this.clients = Collections.synchronizedList(new ArrayList<>());
     }
@@ -80,7 +80,7 @@ public class PaxosSyncServer implements Runnable {
                 }
                 SocketChannel cc = ssc.accept();
                 clients.add(cc);
-                RemotePeerHandler h = new RemotePeerHandler(cc, acceptorFactory, proposalService);
+                RemotePeerHandler h = new RemotePeerHandler(cc, localAcceptors, coordinator);
                 executorService.submit(h);
             } catch (IOException e) {
                 //TODO

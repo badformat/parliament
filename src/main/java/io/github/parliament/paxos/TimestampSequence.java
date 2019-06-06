@@ -1,4 +1,4 @@
-package io.github.parliament.paxos.proposer;
+package io.github.parliament.paxos;
 
 import io.github.parliament.Sequence;
 

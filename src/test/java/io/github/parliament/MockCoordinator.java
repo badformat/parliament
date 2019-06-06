@@ -29,13 +29,33 @@ class MockCoordinator implements Coordinator {
     }
 
     @Override
+    public void instance(int round, byte[] content) {
+        states.put(round, content);
+    }
+
+    @Override
+    public int min() {
+        return 0;
+    }
+
+    @Override
     public int max() {
         return max;
     }
 
     @Override
+    public int max(int m) {
+        return max = m;
+    }
+
+    @Override
     public void forget(int before) {
 
+    }
+
+    @Override
+    public byte[] get(int round) {
+        return new byte[0];
     }
 
     void clear() {

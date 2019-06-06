@@ -1,6 +1,13 @@
 package io.github.parliament.kv;
 
-import io.github.parliament.*;
+import io.github.parliament.Coordinator;
+import io.github.parliament.IntegerSequence;
+import io.github.parliament.PagePersistence;
+import io.github.parliament.ReplicateStateMachine;
+import io.github.parliament.paxos.Paxos;
+import io.github.parliament.paxos.TimestampSequence;
+import io.github.parliament.paxos.client.InetPeerAcceptors;
+import io.github.parliament.paxos.client.PeerAcceptors;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,7 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 /**
  * @author zy
@@ -67,7 +73,7 @@ public class KeyValueServer {
     }
 
     public static void main(String[] args) throws Exception {
-        String prop = System.getProperty("peers");
+        String prop = System.getProperty("PeerAcceptors");
         List<InetSocketAddress> peers = getPeers(prop);
 
         prop = System.getProperty("me");
@@ -79,53 +85,23 @@ public class KeyValueServer {
         prop = System.getProperty("kv");
         InetSocketAddress kv = getInetSocketAddress(prop);
 
-//        ProposalPersistenceService proposalService = ProposalPersistenceService
-//                .builder()
-//                .fileService(new DefaultFileService())
-//                .path(Paths.get(dir))
-//                .build();
-//
-//        PaxosReplicateStateMachine machine = PaxosReplicateStateMachine
-//                .builder()
-//                .me(me)
-//                .peers(peers)
-//                .proposalPersistenceService(proposalService)
-//                .threadNo(20)
-//                .build();
-//
-//        machine.start();
-//        logger.info("本地paxos服务启动成功，地址：" + me);
-
-        @NonNull Persistence pager = PagePersistence.builder().path(Paths.get(dir).resolve("db")).build();
         @NonNull ExecutorService executorService = Executors.newFixedThreadPool(200);
-        @NonNull Coordinator coordinator = new Coordinator() {
-            @Override
-            public void coordinate(int id, byte[] content) {
+        @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(20).build();
+        @NonNull Coordinator coordinator = Paxos.builder()
+                .executorService(executorService)
+                .peerAcceptors(acceptors)
+                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("paxos")).build())
+                .sequence(new TimestampSequence())
+                .build();
 
-            }
-
-            @Override
-            public Future<byte[]> instance(int id) {
-                return null;
-            }
-
-            @Override
-            public int max() {
-                return 0;
-            }
-
-            @Override
-            public void forget(int before) {
-
-            }
-        };
         @NonNull ReplicateStateMachine rsm = ReplicateStateMachine.builder()
                 .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("rsm")).build())
                 .sequence(new IntegerSequence())
                 .coordinator(coordinator)
                 .build();
+
         KeyValueEngine keyValueEngine = KeyValueEngine.builder()
-                .persistence(pager)
+                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("db")).build())
                 .executorService(executorService)
                 .rsm(rsm)
                 .build();

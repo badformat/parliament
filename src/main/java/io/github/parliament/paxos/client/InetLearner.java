@@ -1,4 +1,10 @@
-package io.github.parliament.server;
+package io.github.parliament.paxos.client;
+
+import io.github.parliament.Coordinator;
+import lombok.Builder;
+import lombok.Builder.Default;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -9,24 +15,19 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Optional;
 
-import lombok.Builder;
-import lombok.Builder.Default;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 @Builder
 public class InetLearner {
-    private static final Logger                  logger = LoggerFactory.getLogger(InetLearner.class);
-    private volatile     List<InetSocketAddress> others;
+    private static final Logger logger = LoggerFactory.getLogger(InetLearner.class);
+    private volatile List<InetSocketAddress> others;
     @Default
-    private              ClientCodec             codec  = new ClientCodec();
-    private              ProposalService         proposalService;
+    private ClientCodec codec = new ClientCodec();
+    private Coordinator coordinator;
 
     public boolean syncFrom(int begin) {
         int max = 0;
         try {
             max = learnMax().stream().reduce(-1, (a, b) -> b > a ? b : a);
-            proposalService.updateMaxRound(max);
+            coordinator.max(max);
             if (begin < max) {
                 sync(begin, max);
             }
@@ -75,11 +76,11 @@ public class InetLearner {
             if (!ret.isPresent()) {
                 return false;
             } else {
-                proposalService.saveProposal(round, ret.get());
+                coordinator.instance(round, ret.get());
             }
             return true;
         } catch (Exception e) {
-            // TODO
+            logger.error("failed in sync. round: {}", round, e);
             return false;
         }
     }

@@ -1,4 +1,4 @@
-package io.github.parliament.server;
+package io.github.parliament.paxos.server;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -6,7 +6,6 @@ import java.nio.channels.ByteChannel;
 import java.util.Optional;
 
 import com.google.common.base.Preconditions;
-import io.github.parliament.paxos.Proposal;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Prepare;
 import io.github.parliament.resp.RespArray;
@@ -98,7 +97,7 @@ class ServerCodec {
         }
     }
 
-    ByteBuffer encodePrepare(Prepare<String> prepare) throws IOException {
+    ByteBuffer encodePrepare(Prepare prepare) throws IOException {
         RespSimpleString n = RespSimpleString.withUTF8(prepare.getN());
         RespArray a;
 
@@ -118,7 +117,7 @@ class ServerCodec {
         return a.toByteBuffer();
     }
 
-    ByteBuffer encodeAccept(Accept<String> accept) {
+    ByteBuffer encodeAccept(Accept accept) {
         RespSimpleString n = RespSimpleString.withUTF8(accept.getN());
         RespArray a;
         if (accept.isOk()) {

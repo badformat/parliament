@@ -22,13 +22,6 @@ import java.util.concurrent.*;
  * 并在下次运行时恢复。
  * 每个状态实例执行过程的完整性由处理对象保证。
  * <p>
- * TODO 移到coordinator部分
- * 删除办法：
- * <ul>
- * <li>咨询所有rsm已处理事件的最大编号</li>
- * <li>从以上编号中取最小</li>
- * <li>删除该最小值之前的事件</li>
- * </ul>
  *
  * @author zy
  */

@@ -1,28 +1,28 @@
 package io.github.parliament.paxos.acceptor;
 
-public class Prepare<T extends Comparable<T>> {
+public class Prepare {
     private boolean ok;
-    private T n;
-    private T na;
+    private String n;
+    private String na;
     private byte[] va;
 
-    private Prepare(T n, T na, byte[] va) {
+    private Prepare(String n, String na, byte[] va) {
         this.n = n;
         this.na = na;
         this.va = va;
         this.ok = true;
     }
 
-    private Prepare(T n) {
+    private Prepare(String n) {
         this.n = n;
     }
 
-    public static <T2 extends Comparable<T2>> Prepare<T2> ok(T2 n, T2 na, byte[] va) {
-        return new Prepare<T2>(n, na, va);
+    public static Prepare ok(String n, String na, byte[] va) {
+        return new Prepare(n, na, va);
     }
 
-    public static <T2 extends Comparable<T2>> Prepare<T2> reject(T2 n) {
-        Prepare<T2> reject = new Prepare<T2>(n);
+    public static Prepare reject(String n) {
+        Prepare reject = new Prepare(n);
         reject.setOk(false);
         return reject;
     }
@@ -35,19 +35,19 @@ public class Prepare<T extends Comparable<T>> {
         this.ok = ok;
     }
 
-    public T getN() {
+    public String getN() {
         return n;
     }
 
-    void setN(T n) {
+    void setN(String n) {
         this.n = n;
     }
 
-    public T getNa() {
+    public String getNa() {
         return na;
     }
 
-    void setNa(T na) {
+    void setNa(String na) {
         this.na = na;
     }
 
