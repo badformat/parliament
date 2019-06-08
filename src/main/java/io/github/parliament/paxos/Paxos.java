@@ -1,6 +1,10 @@
 package io.github.parliament.paxos;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.MapMaker;
 import io.github.parliament.Coordinator;
 import io.github.parliament.Persistence;
@@ -17,48 +21,76 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 public class Paxos implements Coordinator, LocalAcceptors {
     private static final Logger logger = LoggerFactory.getLogger(Paxos.class);
     private final ConcurrentMap<Integer, Proposer> proposers = new MapMaker()
             .weakValues()
             .makeMap();
-    private final ConcurrentMap<Integer, CompletableFuture<byte[]>> proposals = new MapMaker()
-            .weakValues()
-            .makeMap();
+    private final Cache<Integer, LocalAcceptor> acceptors = CacheBuilder.newBuilder()
+            .expireAfterWrite(120, TimeUnit.SECONDS)
+            .build();
+    private final LoadingCache<Integer, CompletableFuture<byte[]>> proposals = CacheBuilder.newBuilder()
+            .expireAfterWrite(120, TimeUnit.SECONDS)
+            .build(new CacheLoader<>() {
+                @Override
+                public CompletableFuture<byte[]> load(Integer key) throws Exception {
+                    return new CompletableFuture<>();
+                }
+            });
     private volatile ExecutorService executorService;
     private Sequence<String> sequence;
     private Persistence persistence;
     private PeerAcceptors peerAcceptors;
     private volatile int max = -1;
+    private volatile int min = -1;
+    private volatile int done = -1;
 
     @Builder
     private Paxos(@NonNull ExecutorService executorService,
                   @NonNull Sequence<String> sequence,
                   @NonNull Persistence persistence,
-                  @NonNull PeerAcceptors peerAcceptors) {
+                  @NonNull PeerAcceptors peerAcceptors) throws IOException {
         this.executorService = executorService;
         this.sequence = sequence;
         this.persistence = persistence;
         this.peerAcceptors = peerAcceptors;
+
+        byte[] bytes = persistence.get("min".getBytes());
+        if (bytes != null) {
+            min = ByteBuffer.wrap(bytes).getInt();
+        }
+
+        bytes = persistence.get("max".getBytes());
+        if (bytes != null) {
+            max = ByteBuffer.wrap(bytes).getInt();
+        }
+
+        bytes = persistence.get("done".getBytes());
+        if (bytes != null) {
+            done = ByteBuffer.wrap(bytes).getInt();
+        }
     }
 
     @Override
-    public void coordinate(int round, byte[] content) {
-        Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer(create(r), peers(r), sequence, content));
-        proposals.computeIfAbsent(round, (k) -> new CompletableFuture());
-        proposals.get(round).completeAsync(proposer::propose, executorService);
+    public void coordinate(int round, byte[] content) throws ExecutionException {
+        List<Acceptor> peers = new ArrayList<>();
+        Acceptor me = create(round);
+        List<? extends Acceptor> others = peers(round);
+        peers.addAll(others);
+        peers.add(me);
+        Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer(peers, sequence, content));
+        proposals.get(round).completeAsync(() -> proposer.propose((result) -> {
+            peerAcceptors.release(round);
+        }), executorService);
     }
 
     @Override
-    public Future<byte[]> instance(int round) {
-        proposals.computeIfAbsent(round, (k) -> new CompletableFuture<>());
+    public Future<byte[]> instance(int round) throws ExecutionException {
         byte[] r = get(round);
         if (r != null) {
             proposals.get(round).complete(get(round));
@@ -77,7 +109,23 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
     @Override
     public int min() {
-        return 0;
+        return min;
+    }
+
+    void min(int m) throws IOException {
+        this.min = m;
+        persistence.put("min".getBytes(), ByteBuffer.allocate(4).putInt(m).array());
+    }
+
+    @Override
+    public int done() {
+        return done;
+    }
+
+    @Override
+    public void done(int d) throws IOException {
+        this.done = d;
+        persistence.put("done".getBytes(), ByteBuffer.allocate(4).putInt(d).array());
     }
 
     @Override
@@ -86,13 +134,25 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
-    public int max(int m) {
-        return max = m;
+    public void max(int m) throws IOException {
+        max = m;
+        persistence.put("max".getBytes(), ByteBuffer.allocate(4).putInt(max).array());
     }
 
     @Override
-    public void forget(int before) {
-
+    public void forget(int before) throws IOException {
+        Preconditions.checkState(before <= done);
+        int other = peerAcceptors.done();
+        int cursor = Math.min(before, other);
+        if (cursor < 0) {
+            return;
+        }
+        min(cursor + 1);
+        boolean existed;
+        do {
+            existed = persistence.remove(ByteBuffer.allocate(4).putInt(cursor).array());
+            cursor--;
+        } while (existed && cursor >= 0);
     }
 
     List<? extends Acceptor> peers(int round) {
@@ -100,30 +160,25 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
-    public LocalAcceptor create(int r) {
-        return new LocalAcceptor(r) {
+    public Acceptor create(int round) throws ExecutionException {
+        return acceptors.get(round, () -> new LocalAcceptor(round) {
             @Override
-            public void decide(byte[] agreement) throws IOException {
-                max = Math.max(round, max);
-                peerAcceptors.release(round);
+            public void decide(byte[] agreement) throws Exception {
+                if (round > max) {
+                    max(round);
+                }
                 CompletableFuture<byte[]> future = proposals.get(round);
                 if (future != null && !future.isDone()) {
                     future.complete(agreement);
                 }
                 byte[] r = get(round);
                 if (r != null) {
-                    Preconditions.checkState(Arrays.equals(r, agreement));
+                    Preconditions.checkState(Arrays.equals(r, agreement), "decided value is not equals.");
                 } else {
                     put(round, agreement);
                 }
             }
-
-            @Override
-            public void failed(String error) {
-                peerAcceptors.release(round);
-                logger.error("proposal instance {} failed. error： {}", round, error);
-            }
-        };
+        });
     }
 
     public byte[] get(int round) {

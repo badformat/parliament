@@ -1,6 +1,7 @@
 package io.github.parliament;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 /**
@@ -14,19 +15,23 @@ import java.util.concurrent.Future;
  * @author zy
  **/
 public interface Coordinator {
-    void coordinate(int id, byte[] content);
+    void coordinate(int id, byte[] content) throws ExecutionException;
 
-    Future<byte[]> instance(int id) throws IOException;
+    Future<byte[]> instance(int id) throws IOException, ExecutionException;
 
     void instance(int round, byte[] content) throws IOException;
 
     int min();
 
+    int done() throws IOException;
+
+    void done(int done) throws IOException;
+
     int max();
 
-    int max(int m);
+    void max(int m) throws IOException;
 
-    void forget(int before);
+    void forget(int before) throws IOException;
 
     byte[] get(int round);
 }

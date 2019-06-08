@@ -1,10 +1,11 @@
 package io.github.parliament;
 
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 
-class MockCoordinator implements Coordinator {
+class MockPaxos implements Coordinator {
     private ConcurrentHashMap<Integer, byte[]> states = new ConcurrentHashMap<>();
     private ConcurrentHashMap<Integer, CompletableFuture<byte[]>> waiting = new ConcurrentHashMap<>();
     private volatile int max = 0;
@@ -39,13 +40,23 @@ class MockCoordinator implements Coordinator {
     }
 
     @Override
+    public int done() throws IOException {
+        return 0;
+    }
+
+    @Override
+    public void done(int done) throws IOException {
+
+    }
+
+    @Override
     public int max() {
         return max;
     }
 
     @Override
-    public int max(int m) {
-        return max = m;
+    public void max(int m) {
+        max = m;
     }
 
     @Override

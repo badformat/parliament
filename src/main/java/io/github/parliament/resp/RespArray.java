@@ -1,15 +1,14 @@
 package io.github.parliament.resp;
 
+import com.google.common.primitives.Bytes;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+import lombok.val;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
-import com.google.common.primitives.Bytes;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
-import lombok.val;
 
 @EqualsAndHashCode
 @ToString

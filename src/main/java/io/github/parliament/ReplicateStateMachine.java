@@ -39,6 +39,7 @@ public class ReplicateStateMachine implements Runnable {
     private volatile Integer done = -1;
     private volatile Integer max = -1;
     private ConcurrentMap<Integer, CompletableFuture<State>> futures = new MapMaker().weakValues().makeMap();
+    private volatile int forgetThreshold = 0;
 
     @Builder
     private ReplicateStateMachine(@NonNull Persistence persistence,
@@ -82,7 +83,7 @@ public class ReplicateStateMachine implements Runnable {
         return state;
     }
 
-    public CompletableFuture<State> submit(State state) throws IOException {
+    public CompletableFuture<State> submit(State state) throws IOException, ExecutionException {
         Preconditions.checkState(!futures.containsKey(state.getId()),
                 "instance id " + state.getId() + " already exists.");
         CompletableFuture<State> future = futures.computeIfAbsent(state.getId(), (k) -> new CompletableFuture<>());
@@ -120,6 +121,12 @@ public class ReplicateStateMachine implements Runnable {
             }
 
             done(id);
+
+            forgetThreshold++;
+            if (forgetThreshold > 100) {
+                forgetThreshold = 0;
+                coordinator.forget(done());
+            }
         } finally {
             removeRedoLog();
         }
@@ -142,7 +149,7 @@ public class ReplicateStateMachine implements Runnable {
         done = d;
     }
 
-    public void forget(int before) {
+    public void forget(int before) throws IOException {
         Preconditions.checkState(before <= done());
         coordinator.forget(before);
     }

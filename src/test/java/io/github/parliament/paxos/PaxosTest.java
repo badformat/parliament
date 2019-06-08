@@ -5,8 +5,6 @@ import io.github.parliament.Persistence;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.LocalAcceptor;
 import io.github.parliament.paxos.client.PeerAcceptors;
-import lombok.NonNull;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,49 +15,33 @@ import java.util.List;
 import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.*;
 
 class PaxosTest {
     private Paxos paxos;
     private byte[] value = "content".getBytes();
     private Persistence persistence = new MockPersistence();
+    private PeerAcceptors peerAcceptors;
 
     @BeforeEach
-    void setUp() {
-        @NonNull PeerAcceptors factory = new PeerAcceptors() {
+    void setUp() throws IOException {
+        List<Acceptor> acceptors = new ArrayList<>();
+        acceptors.add(new LocalAcceptor(1) {
             @Override
-            public List<? extends Acceptor> create(int round) {
-                List<Acceptor> acceptors = new ArrayList<>();
-                acceptors.add(new LocalAcceptor(round) {
-                    @Override
-                    public void decide(byte[] agreement) {
-
-                    }
-
-                    @Override
-                    public void failed(String error) {
-
-                    }
-                });
-                return acceptors;
-            }
-
-            @Override
-            public void release(int round) {
+            public void decide(byte[] agreement) {
 
             }
-        };
-
+        });
+        peerAcceptors = mock(PeerAcceptors.class);
+        when(peerAcceptors.create(anyInt())).thenAnswer((ctx) -> acceptors);
+        doNothing().when(peerAcceptors).release(anyInt());
         paxos = Paxos.builder()
                 .executorService(Executors.newFixedThreadPool(10))
                 .sequence(new TimestampSequence())
-                .peerAcceptors(factory)
+                .peerAcceptors(peerAcceptors)
                 .persistence(persistence)
                 .build();
-    }
-
-    @AfterEach
-    void tearDown() {
-
     }
 
     @Test
@@ -71,9 +53,15 @@ class PaxosTest {
     }
 
     @Test
-    void asyncInstance() throws InterruptedException, ExecutionException, TimeoutException {
+    void asyncInstance() throws InterruptedException, ExecutionException {
         Future<byte[]> future = paxos.instance(10);
-        new Thread(() -> paxos.coordinate(10, value)).start();
+        new Thread(() -> {
+            try {
+                paxos.coordinate(10, value);
+            } catch (ExecutionException e) {
+                fail(e);
+            }
+        }).start();
         assertArrayEquals(value, future.get());
         assertEquals(10, paxos.max());
     }
@@ -82,5 +70,30 @@ class PaxosTest {
     void instanceOfDone() throws IOException, InterruptedException, ExecutionException, TimeoutException {
         persistence.put(ByteBuffer.allocate(4).putInt(1).array(), value);
         assertArrayEquals(value, paxos.instance(1).get(1, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void max() throws Exception {
+        paxos.create(4).decide(value);
+        assertEquals(4, paxos.max());
+        assertEquals(4, ByteBuffer.wrap(persistence.get("max".getBytes())).getInt());
+    }
+
+    @Test
+    void forget() throws IOException, ExecutionException, TimeoutException, InterruptedException {
+        paxos.coordinate(5, value);
+        paxos.instance(5).get(1, TimeUnit.SECONDS);
+        paxos.done(5);
+        when(peerAcceptors.done()).thenReturn(5);
+        paxos.forget(5);
+        assertEquals(6, paxos.min());
+        assertEquals(5, paxos.done());
+    }
+
+    @Test
+    void done() throws IOException {
+        paxos.done(4);
+        assertEquals(4, paxos.done());
+        assertEquals(4, ByteBuffer.wrap(persistence.get("done".getBytes())).getInt());
     }
 }

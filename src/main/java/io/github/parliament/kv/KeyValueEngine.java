@@ -14,11 +14,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -67,7 +67,7 @@ public class KeyValueEngine implements EventProcessor {
         rsm.start(this, executorService);
     }
 
-    public Future<RespData> execute(byte[] bytes) throws Exception {
+    public Future<RespData> execute(byte[] bytes) throws UnknownKeyValueCommand, IOException, ExecutionException {
         RespDecoder decoder = new RespDecoder();
         decoder.decode(bytes);
         RespArray request = decoder.get();

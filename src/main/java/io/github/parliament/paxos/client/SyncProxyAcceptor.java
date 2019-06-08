@@ -13,7 +13,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
-class PeerSyncProxy implements Acceptor {
+class SyncProxyAcceptor implements Acceptor {
     @Getter(AccessLevel.PACKAGE)
     private InetSocketAddress remote;
     @Getter(AccessLevel.PACKAGE)
@@ -24,7 +24,7 @@ class PeerSyncProxy implements Acceptor {
     private volatile boolean ioFailed = false;
 
     @Builder
-    protected PeerSyncProxy(int round, InetSocketAddress remote, SocketChannel channel) {
+    protected SyncProxyAcceptor(int round, InetSocketAddress remote, SocketChannel channel) {
         this.round = round;
         this.remote = remote;
         this.channel = channel;
@@ -60,6 +60,25 @@ class PeerSyncProxy implements Acceptor {
         }
     }
 
+    int max() throws IOException {
+        synchronized (channel) {
+            ByteBuffer src = codec.encodeMax();
+            while (src.hasRemaining()) {
+                channel.write(src);
+            }
+            return codec.decodeMax(channel);
+        }
+    }
+
+    int done() throws IOException {
+        try {
+            return delegateDone();
+        } catch (IOException e) {
+            ioFailed = true;
+            throw e;
+        }
+    }
+
     Prepare delegatePrepare(int round, String n) throws IOException {
         synchronized (channel) {
             ByteBuffer request = codec.encodePrepare(round, n);
@@ -82,7 +101,7 @@ class PeerSyncProxy implements Acceptor {
         }
     }
 
-    public void delegateDecide(int round, byte[] agreement) throws Exception {
+    void delegateDecide(int round, byte[] agreement) throws Exception {
         synchronized (channel) {
             Preconditions.checkNotNull(agreement, "decide agreement is null");
             ByteBuffer src = codec.encodeDecide(round, agreement);
@@ -90,6 +109,16 @@ class PeerSyncProxy implements Acceptor {
                 channel.write(src);
             }
             codec.decodeDecide(channel);
+        }
+    }
+
+    int delegateDone() throws IOException {
+        synchronized (channel) {
+            ByteBuffer src = codec.encodeDone();
+            while (src.hasRemaining()) {
+                channel.write(src);
+            }
+            return codec.decodeDone(channel);
         }
     }
 }

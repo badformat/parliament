@@ -4,7 +4,6 @@ import com.google.common.base.Preconditions;
 import io.github.parliament.Sequence;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
-import io.github.parliament.paxos.acceptor.LocalAcceptor;
 import io.github.parliament.paxos.acceptor.Prepare;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,33 +12,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 
 /**
  * @author zy
  */
 public class Proposer {
     private static final Logger logger = LoggerFactory.getLogger(Proposer.class);
-    private LocalAcceptor local;
-    private List<Acceptor> acceptors;
+    private List<? extends Acceptor> acceptors;
     private int majority = Integer.MAX_VALUE;
     private Sequence<String> sequence;
     private boolean decided = false;
     private String n;
     private byte[] agreement;
 
-    public Proposer(LocalAcceptor local, List<? extends Acceptor> peers, Sequence<String> sequence, final byte[] proposal) {
+    public Proposer(List<? extends Acceptor> acceptors, Sequence<String> sequence, final byte[] proposal) {
         Preconditions.checkArgument(proposal != null);
-        this.acceptors = new ArrayList<>();
-        this.local = local;
-        this.acceptors.add(local);
-        this.acceptors.addAll(peers);
-        this.majority = calcMajority(peers.size());
+        this.acceptors = acceptors;
+        this.majority = calcMajority(acceptors.size());
         this.sequence = sequence;
         this.agreement = proposal;
     }
 
-    public byte[] propose() {
-        String error = "";
+    public byte[] propose(Consumer<Boolean> callback) {
         try {
             ThreadLocalRandom random = ThreadLocalRandom.current();
 
@@ -55,12 +50,10 @@ public class Proposer {
                         Thread.sleep(Math.abs(random.nextInt()) % 100);
                     } catch (InterruptedException e) {
                         logger.error("failed in propose.", e);
-                        error = e.getMessage();
                         return null;
                     }
                     if (retried > 10) {
                         logger.error("failed in propose.Retried {} times.", 10);
-                        error = "retried too many times";
                         throw new IllegalStateException();
                     }
                 }
@@ -74,7 +67,6 @@ public class Proposer {
                     decideCnt++;
                 } catch (Exception e) {
                     logger.error("failed in propose.", e);
-                    error = e.getMessage();
                 }
             }
 
@@ -83,13 +75,10 @@ public class Proposer {
             } else {
                 logger.error("failed in propose. decided < majority.");
                 decided = false;
-                error = "failed at decide()";
                 throw new IllegalStateException("decided < majority.");
             }
         } finally {
-            if (!decided) {
-                local.failed(error);
-            }
+            callback.accept(decided);
         }
     }
 

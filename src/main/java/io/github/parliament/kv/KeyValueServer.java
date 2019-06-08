@@ -42,8 +42,8 @@ public class KeyValueServer {
             @Override
             public void completed(AsynchronousSocketChannel channel, Object attachment) {
                 serverSocketChannel.accept(attachment, this);
-                ClientHandler clientHandler = new ClientHandler(channel);
-                channel.read(clientHandler.getByteBuffer(), engine, clientHandler);
+                ReadHandler readHandler = new ReadHandler(channel);
+                channel.read(readHandler.getByteBuffer(), engine, readHandler);
             }
 
             @Override

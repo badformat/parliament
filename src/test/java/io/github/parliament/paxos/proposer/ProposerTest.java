@@ -3,7 +3,6 @@ package io.github.parliament.paxos.proposer;
 import io.github.parliament.Sequence;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
-import io.github.parliament.paxos.acceptor.LocalAcceptor;
 import io.github.parliament.paxos.acceptor.Prepare;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,8 +30,6 @@ class ProposerTest {
     private Acceptor acc3;
     @Mock
     private Acceptor acc4;
-    @Mock
-    private LocalAcceptor local;
 
     private AtomicInteger ai = new AtomicInteger();
     private byte[] proposal;
@@ -46,13 +43,10 @@ class ProposerTest {
         peers.add(acc4);
 
         proposal = "proposal".getBytes();
-        proposer = new Proposer(local, peers, seqNoGenerator, proposal);
+        proposer = new Proposer(peers, seqNoGenerator, proposal);
 
         all.addAll(peers);
-        all.add(local);
-        when(seqNoGenerator.next()).thenAnswer((ctx) -> {
-            return String.valueOf(ai.getAndIncrement());
-        });
+        when(seqNoGenerator.next()).thenAnswer((ctx) -> String.valueOf(ai.getAndIncrement()));
     }
 
     @Test
@@ -80,7 +74,8 @@ class ProposerTest {
             });
         }
 
-        proposer.propose();
+        proposer.propose((b) -> {
+        });
         for (Acceptor acceptor : peers) {
             verify(acceptor, times(1)).prepare(anyString());
         }
@@ -100,7 +95,6 @@ class ProposerTest {
         Prepare prepare = Prepare.ok(n, n, proposal);
 
         when(acc4.prepare(anyString())).thenReturn(prepare);
-        when(local.prepare(anyString())).thenReturn(prepare);
 
         assertFalse(proposer.prepare());
         assertFalse(proposer.isDecided());
@@ -113,14 +107,12 @@ class ProposerTest {
         Prepare rejectPrepare = Prepare.reject(n);
 
         when(acc1.prepare(anyString())).thenReturn(rejectPrepare);
-        when(acc2.prepare(anyString())).thenReturn(rejectPrepare);
 
         proposer.setN(n);
         Prepare prepare = Prepare.ok(n, n, proposal);
-
+        when(acc2.prepare(anyString())).thenReturn(prepare);
         when(acc3.prepare(anyString())).thenReturn(prepare);
         when(acc4.prepare(anyString())).thenReturn(prepare);
-        when(local.prepare(anyString())).thenReturn(prepare);
 
         assertTrue(proposer.prepare());
     }
@@ -131,7 +123,6 @@ class ProposerTest {
         Prepare rejectPrepare = Prepare.reject(n);
 
         when(acc1.prepare(anyString())).thenReturn(rejectPrepare);
-        when(acc2.prepare(anyString())).thenReturn(rejectPrepare);
 
         proposer.setN(n);
         Prepare prepare = Prepare.ok(n, n, proposal);
@@ -141,7 +132,7 @@ class ProposerTest {
 
         byte[] va = "another proposal".getBytes();
         prepare = Prepare.ok(n, seqNoGenerator.next(), va);
-        when(local.prepare(anyString())).thenReturn(prepare);
+        when(acc2.prepare(anyString())).thenReturn(prepare);
 
         assertTrue(proposer.prepare());
         assertEquals(va, proposer.getAgreement());
@@ -157,7 +148,6 @@ class ProposerTest {
 
         Accept accept = Accept.ok(n);
         when(acc4.accept(anyString(), any())).thenReturn(accept);
-        when(local.accept(anyString(), any())).thenReturn(accept);
 
         proposer.setN(n);
 
@@ -169,12 +159,11 @@ class ProposerTest {
         String n = seqNoGenerator.next();
         Accept rejectAccept = Accept.reject(n);
         when(acc1.accept(anyString(), any())).thenReturn(rejectAccept);
-        when(acc2.accept(anyString(), any())).thenReturn(rejectAccept);
 
         Accept accept = Accept.ok(n);
+        when(acc2.accept(anyString(), any())).thenReturn(accept);
         when(acc3.accept(anyString(), any())).thenReturn(accept);
         when(acc4.accept(anyString(), any())).thenReturn(accept);
-        when(local.accept(anyString(), any())).thenReturn(accept);
 
         proposer.setN(n);
 

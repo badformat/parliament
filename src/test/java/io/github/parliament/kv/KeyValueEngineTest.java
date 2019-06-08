@@ -1,7 +1,7 @@
 package io.github.parliament.kv;
 
-import io.github.parliament.Persistence;
 import io.github.parliament.MockPersistence;
+import io.github.parliament.Persistence;
 import io.github.parliament.ReplicateStateMachine;
 import io.github.parliament.State;
 import io.github.parliament.resp.*;
@@ -9,8 +9,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -29,14 +27,12 @@ import static org.mockito.Mockito.when;
  */
 class KeyValueEngineTest {
     private KeyValueEngine keyValueEngine;
-    private Path path = Paths.get("./test");
     private ExecutorService executorService = mock(ExecutorService.class);
     private Persistence persistence;
     private ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
 
     @BeforeEach
     void beforeEach() throws IOException {
-
         persistence = new MockPersistence();
         keyValueEngine = KeyValueEngine.builder()
                 .executorService(executorService)
@@ -48,7 +44,7 @@ class KeyValueEngineTest {
     }
 
     @Test
-    void putAndGet() throws Exception {
+    void putAndGet() {
         keyValueEngine.process(request("put", "key", "value"));
         byte[] value = keyValueEngine.process(request("get", "key"));
         RespBulkString s = RespDecoder.create().decode(value).get();

@@ -6,11 +6,12 @@ import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.client.PeerAcceptors;
-import io.github.parliament.paxos.server.PaxosSyncServer;
+import io.github.parliament.paxos.server.PaxosServer;
 import lombok.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -44,11 +45,9 @@ public class Application {
                 .sequence(new TimestampSequence())
                 .build();
 
-        PaxosSyncServer paxosServer = PaxosSyncServer.builder()
-                .coordinator(paxos)
-                .localAcceptors(paxos)
+        PaxosServer paxosServer = PaxosServer.builder()
+                .paxos(paxos)
                 .me(me)
-                .peersNo(peers.size())
                 .build();
 
         paxosServer.start();
@@ -69,6 +68,14 @@ public class Application {
         KeyValueServer server = KeyValueServer.builder().socketAddress(kv).keyValueEngine(keyValueEngine).build();
         server.start();
         logger.info("本地kv服务启动成功，地址：" + kv);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("服务进程退出.");
+            try {
+                server.shutdown();
+                paxosServer.shutdown();
+            } catch (IOException e) {
+            }
+        }));
     }
 
     public static List<InetSocketAddress> getPeers(String prop) {

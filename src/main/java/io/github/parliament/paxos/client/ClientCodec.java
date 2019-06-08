@@ -1,5 +1,10 @@
 package io.github.parliament.paxos.client;
 
+import com.google.common.base.Preconditions;
+import io.github.parliament.paxos.acceptor.Accept;
+import io.github.parliament.paxos.acceptor.Prepare;
+import io.github.parliament.resp.*;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
@@ -7,22 +12,11 @@ import java.nio.channels.SocketChannel;
 import java.util.Objects;
 import java.util.Optional;
 
-import com.google.common.base.Preconditions;
-import io.github.parliament.paxos.acceptor.Accept;
-import io.github.parliament.paxos.acceptor.Prepare;
-import io.github.parliament.resp.RespArray;
-import io.github.parliament.resp.RespBulkString;
-import io.github.parliament.resp.RespError;
-import io.github.parliament.resp.RespInteger;
-import io.github.parliament.resp.RespSimpleString;
-import io.github.parliament.resp.RespParser;
-
 /**
- *
  * @author zy
  */
-class ClientCodec {
-    ByteBuffer encodePrepare(int round, String n) {
+public class ClientCodec {
+    public ByteBuffer encodePrepare(int round, String n) {
         RespSimpleString cmd = RespSimpleString.withUTF8("prepare");
         RespInteger pr = RespInteger.with(round);
         RespSimpleString pn = RespSimpleString.withUTF8(n);
@@ -31,7 +25,7 @@ class ClientCodec {
         return a.toByteBuffer();
     }
 
-    ByteBuffer encodeAccept(int round, String n, byte[] value) {
+    public ByteBuffer encodeAccept(int round, String n, byte[] value) {
         RespSimpleString cmd = RespSimpleString.withUTF8("accept");
         RespInteger pr = RespInteger.with(round);
         RespSimpleString pn = RespSimpleString.withUTF8(n);
@@ -41,7 +35,7 @@ class ClientCodec {
         return a.toByteBuffer();
     }
 
-    ByteBuffer encodeDecide(int round, byte[] value) {
+    public ByteBuffer encodeDecide(int round, byte[] value) {
         Preconditions.checkNotNull(value, "serialize null decide value");
         RespSimpleString cmd = RespSimpleString.withUTF8("decide");
         RespInteger pr = RespInteger.with(round);
@@ -51,23 +45,23 @@ class ClientCodec {
         return a.toByteBuffer();
     }
 
-    ByteBuffer encodeMax() {
+    public ByteBuffer encodeMax() {
         RespSimpleString cmd = RespSimpleString.withUTF8("max");
         return RespArray.with(cmd).toByteBuffer();
     }
 
-    ByteBuffer encodeMin() {
-        RespSimpleString cmd = RespSimpleString.withUTF8("min");
+    public ByteBuffer encodeDone() {
+        RespSimpleString cmd = RespSimpleString.withUTF8("done");
         return RespArray.with(cmd).toByteBuffer();
     }
 
-    ByteBuffer encodePull(int round) {
+    public ByteBuffer encodePull(int round) {
         RespSimpleString cmd = RespSimpleString.withUTF8("pull");
         RespInteger r = RespInteger.with(round);
         return RespArray.with(cmd, r).toByteBuffer();
     }
 
-    Prepare decodePrepare(ByteChannel remote, String n) throws IOException {
+    public Prepare decodePrepare(ByteChannel remote, String n) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.get(0) instanceof RespError) {
@@ -89,7 +83,7 @@ class ClientCodec {
         return Prepare.reject(rn);
     }
 
-    Accept decodeAccept(ByteChannel remote, String n) throws IOException {
+    public Accept decodeAccept(ByteChannel remote, String n) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.get(0) instanceof RespError) {
@@ -105,7 +99,7 @@ class ClientCodec {
         return Accept.reject(rn);
     }
 
-    void decodeDecide(ByteChannel remote) throws IOException {
+    public void decodeDecide(ByteChannel remote) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.get(0) instanceof RespError) {
@@ -113,17 +107,17 @@ class ClientCodec {
         }
     }
 
-    int decodeMax(SocketChannel remote) throws IOException {
+    public int decodeMax(SocketChannel remote) throws IOException {
         RespParser respParser = RespParser.create(remote);
         return respParser.getAsInteger().getN();
     }
 
-    int decodeMin(SocketChannel remote) throws IOException {
+    public int decodeDone(SocketChannel remote) throws IOException {
         RespParser respParser = RespParser.create(remote);
         return respParser.getAsInteger().getN();
     }
 
-    Optional<byte[]> decodePull(int round, SocketChannel remote) throws IOException {
+    public Optional<byte[]> decodePull(int round, SocketChannel remote) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.size() == 0) {
@@ -139,5 +133,4 @@ class ClientCodec {
         byte[] agreement = ((RespBulkString) array.get(1)).getContent();
         return Optional.of(agreement);
     }
-
 }

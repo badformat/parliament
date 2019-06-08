@@ -45,6 +45,4 @@ public abstract class LocalAcceptor implements Acceptor {
 
     @Override
     abstract public void decide(byte[] agreement) throws Exception;
-
-    abstract public void failed(String error);
 }

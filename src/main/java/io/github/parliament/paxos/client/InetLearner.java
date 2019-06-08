@@ -1,6 +1,6 @@
 package io.github.parliament.paxos.client;
 
-import io.github.parliament.Coordinator;
+import io.github.parliament.paxos.Paxos;
 import lombok.Builder;
 import lombok.Builder.Default;
 import org.slf4j.Logger;
@@ -21,13 +21,13 @@ public class InetLearner {
     private volatile List<InetSocketAddress> others;
     @Default
     private ClientCodec codec = new ClientCodec();
-    private Coordinator coordinator;
+    private Paxos paxos;
 
     public boolean syncFrom(int begin) {
         int max = 0;
         try {
             max = learnMax().stream().reduce(-1, (a, b) -> b > a ? b : a);
-            coordinator.max(max);
+            paxos.max(max);
             if (begin < max) {
                 sync(begin, max);
             }
@@ -76,7 +76,7 @@ public class InetLearner {
             if (!ret.isPresent()) {
                 return false;
             } else {
-                coordinator.instance(round, ret.get());
+                paxos.instance(round, ret.get());
             }
             return true;
         } catch (Exception e) {
@@ -89,11 +89,11 @@ public class InetLearner {
         List<Integer> mins = new ArrayList<>();
         for (InetSocketAddress peer : others) {
             try (SocketChannel remote = SocketChannel.open(peer)) {
-                ByteBuffer cmd = codec.encodeMin();
+                ByteBuffer cmd = codec.encodeDone();
                 while (cmd.hasRemaining()) {
                     remote.write(cmd);
                 }
-                mins.add(codec.decodeMin(remote));
+                mins.add(codec.decodeDone(remote));
             }
         }
         return mins;

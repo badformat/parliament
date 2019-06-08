@@ -31,7 +31,7 @@ class ReplicateStateMachineWithPersistenceTest {
     static private ReplicateStateMachine create(String path) throws IOException {
         PagePersistence persistence = PagePersistence.builder().path(Paths.get(path)).build();
         Sequence<Integer> sequence = new IntegerSequence();
-        MockCoordinator coordinator = new MockCoordinator();
+        MockPaxos coordinator = new MockPaxos();
         ReplicateStateMachine ret = ReplicateStateMachine
                 .builder()
                 .persistence(persistence)

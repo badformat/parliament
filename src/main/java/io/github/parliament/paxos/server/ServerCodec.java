@@ -1,36 +1,24 @@
 package io.github.parliament.paxos.server;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.ByteChannel;
-import java.util.Optional;
-
 import com.google.common.base.Preconditions;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Prepare;
-import io.github.parliament.resp.RespArray;
-import io.github.parliament.resp.RespBulkString;
-import io.github.parliament.resp.RespData;
-import io.github.parliament.resp.RespError;
-import io.github.parliament.resp.RespInteger;
-import io.github.parliament.resp.RespSimpleString;
-import io.github.parliament.resp.RespParser;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
-import lombok.Value;
+import io.github.parliament.resp.*;
+import lombok.*;
+
+import java.nio.ByteBuffer;
+import java.util.Optional;
 
 /**
- *
  * @author zy
  */
-class ServerCodec {
+public class ServerCodec {
 
     public enum Command {
         prepare,
         accept,
         decide,
+        done,
         min,
         max,
         pull
@@ -44,16 +32,14 @@ class ServerCodec {
         @Getter
         Command cmd;
         @Getter
-        int     round;
+        int round;
         @Getter
-        String  n;
+        String n;
         @Getter
-        byte[]  v;
+        byte[] v;
     }
 
-    Request decode(ByteChannel channel) throws IOException {
-        RespParser respParser = RespParser.create(channel);
-        RespArray a = respParser.getAsArray();
+    public Request decode(RespArray a) {
         String cmd = ((RespSimpleString) a.get(0)).getContent();
         switch (cmd) {
             case "prepare":
@@ -88,6 +74,7 @@ class ServerCodec {
                         .build();
             case "max":
             case "min":
+            case "done":
                 return Request.builder().cmd(Command.valueOf(cmd)).build();
             case "pull":
                 round = ((RespInteger) a.get(1)).getN();
@@ -97,7 +84,7 @@ class ServerCodec {
         }
     }
 
-    ByteBuffer encodePrepare(Prepare prepare) throws IOException {
+    public ByteBuffer encodePrepare(Prepare prepare) {
         RespSimpleString n = RespSimpleString.withUTF8(prepare.getN());
         RespArray a;
 
@@ -117,7 +104,7 @@ class ServerCodec {
         return a.toByteBuffer();
     }
 
-    ByteBuffer encodeAccept(Accept accept) {
+    public ByteBuffer encodeAccept(Accept accept) {
         RespSimpleString n = RespSimpleString.withUTF8(accept.getN());
         RespArray a;
         if (accept.isOk()) {
@@ -129,14 +116,14 @@ class ServerCodec {
         return a.toByteBuffer();
     }
 
-    ByteBuffer encodeError(String msg) {
+    public ByteBuffer encodeError(String msg) {
         RespError n = RespError.withUTF8(msg);
         RespArray a = RespArray.with(n);
         return a.toByteBuffer();
 
     }
 
-    ByteBuffer encodeDecide() {
+    public ByteBuffer encodeDecide() {
         RespArray a;
         RespSimpleString ok = RespSimpleString.withUTF8("ok");
         a = RespArray.with(ok);

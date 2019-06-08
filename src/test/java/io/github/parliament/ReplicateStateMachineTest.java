@@ -19,7 +19,7 @@ class ReplicateStateMachineTest {
     private ReplicateStateMachine rsm;
     private EventProcessor processor = mock(EventProcessor.class);
     private Persistence persistence = new MockPersistence();
-    private MockCoordinator coordinator = new MockCoordinator();
+    private MockPaxos coordinator = new MockPaxos();
     private Sequence<Integer> sequence = new IntegerSequence();
 
     @BeforeEach
@@ -80,7 +80,7 @@ class ReplicateStateMachineTest {
                 .map((n) -> {
                     try {
                         rsm.submit(rsm.state((n + "").getBytes()));
-                    } catch (IOException e) {
+                    } catch (IOException | ExecutionException e) {
                         fail(e);
                     }
                     return n;
