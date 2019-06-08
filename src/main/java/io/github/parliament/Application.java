@@ -23,7 +23,7 @@ public class Application {
     private static final Logger logger = LoggerFactory.getLogger(Application.class);
 
     public static void main(String[] args) throws Exception {
-        String prop = System.getProperty("PeerAcceptors");
+        String prop = System.getProperty("peers");
         List<InetSocketAddress> peers = getPeers(prop);
 
         prop = System.getProperty("me");

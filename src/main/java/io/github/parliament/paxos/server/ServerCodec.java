@@ -117,10 +117,7 @@ public class ServerCodec {
     }
 
     public ByteBuffer encodeError(String msg) {
-        RespError n = RespError.withUTF8(msg);
-        RespArray a = RespArray.with(n);
-        return a.toByteBuffer();
-
+        return RespError.withUTF8(msg).toByteBuffer();
     }
 
     public ByteBuffer encodeDecide() {
