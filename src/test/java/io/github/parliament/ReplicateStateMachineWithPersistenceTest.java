@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
@@ -21,15 +20,17 @@ class ReplicateStateMachineWithPersistenceTest {
     private static ReplicateStateMachine rsm;
     private static EventProcessor processor = mock(EventProcessor.class);
     private static ExecutorService executor = Executors.newFixedThreadPool(10);
+    private static Path tempDir;
 
     @BeforeAll
     static void beforeAll() throws IOException {
-        rsm = create("./rsm/1");
+        tempDir = Files.createTempDirectory("test");
+        rsm = create("1");
         rsm.start(processor, executor);
     }
 
-    static private ReplicateStateMachine create(String path) throws IOException {
-        PagePersistence persistence = PagePersistence.builder().path(Paths.get(path)).build();
+    static private ReplicateStateMachine create(String dir) throws IOException {
+        PagePersistence persistence = PagePersistence.builder().path(tempDir.resolve(dir)).build();
         Sequence<Integer> sequence = new IntegerSequence();
         MockPaxos coordinator = new MockPaxos();
         ReplicateStateMachine ret = ReplicateStateMachine
@@ -45,7 +46,7 @@ class ReplicateStateMachineWithPersistenceTest {
     @AfterAll
     static void afterAll() throws IOException {
         executor.shutdown();
-        Files.walk(Paths.get("./rsm"))
+        Files.walk(tempDir)
                 .sorted(Comparator.reverseOrder())
                 .map(Path::toFile)
                 .forEach(File::delete);
@@ -71,7 +72,7 @@ class ReplicateStateMachineWithPersistenceTest {
 
     @Test
     void redoLog() throws IOException {
-        ReplicateStateMachine rsm1 = create("./rsm/2");
+        ReplicateStateMachine rsm1 = create("2");
         rsm1.getPersistence().put(ReplicateStateMachine.RSM_DONE_REDO,
                 ByteBuffer.allocate(4).putInt(88).array());
         rsm1.start(processor, executor);
