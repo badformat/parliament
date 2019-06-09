@@ -81,10 +81,10 @@ class PaxosTest {
 
     @Test
     void forget() throws IOException, ExecutionException, TimeoutException, InterruptedException {
+        when(peerAcceptors.done()).thenReturn(5);
         paxos.coordinate(5, value);
         paxos.instance(5).get(1, TimeUnit.SECONDS);
         paxos.done(5);
-        when(peerAcceptors.done()).thenReturn(5);
         paxos.forget(5);
         assertEquals(6, paxos.min());
         assertEquals(5, paxos.done());

@@ -30,7 +30,7 @@ class KeyValueServerTest {
     private static KeyValueServer server;
     private static SocketChannel client;
     private static RespDecoder respDecoder = RespDecoder.create();
-    private static State state = mock(State.class);
+    private static volatile State state = mock(State.class);
 
     @BeforeAll
     static void beforeAll() throws Exception {
