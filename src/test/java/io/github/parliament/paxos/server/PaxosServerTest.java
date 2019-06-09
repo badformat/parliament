@@ -96,7 +96,7 @@ class PaxosServerTest {
                 fail("failed at " + r, e);
             }
         });
-
+        
         rounds.stream().parallel().forEach(r -> {
             try {
                 byte[] actual = me.instance(r).get(3, TimeUnit.SECONDS);

@@ -30,7 +30,6 @@ public class InetPeerAcceptors implements PeerAcceptors {
     private final ConcurrentHashMap<InetSocketAddress, ArrayDeque<SocketChannel>> busyChannels
             = new ConcurrentHashMap<>();
     private int pmc;
-    private Object lock = new Object();
 
     @Builder
     private InetPeerAcceptors(@NonNull List<InetSocketAddress> peers, int pmc) {
@@ -88,15 +87,13 @@ public class InetPeerAcceptors implements PeerAcceptors {
 
     @Override
     public void release(int round) {
-        synchronized (lock) {
-            List<SyncProxyAcceptor> acc = acceptors.remove(round);
-            Preconditions.checkState(acc != null);
-            for (SyncProxyAcceptor a : acc) {
-                if (a.getChannel() != null) {
-                    SocketChannel channel = a.getChannel();
-                    InetSocketAddress address = a.getRemote();
-                    releaseChannel(address, channel, a.isIoFailed());
-                }
+        List<SyncProxyAcceptor> acc = acceptors.remove(round);
+        Preconditions.checkState(acc != null);
+        for (SyncProxyAcceptor a : acc) {
+            if (a.getChannel() != null) {
+                SocketChannel channel = a.getChannel();
+                InetSocketAddress address = a.getRemote();
+                releaseChannel(address, channel, a.isIoFailed());
             }
         }
     }
@@ -122,6 +119,7 @@ public class InetPeerAcceptors implements PeerAcceptors {
         return done;
     }
 
+    Object lock = new Object();
     SocketChannel acquireChannel(InetSocketAddress address) throws IOException, NoConnectionInPool {
         synchronized (lock) {
             idleChannels.putIfAbsent(address, new ArrayDeque<>());
@@ -146,18 +144,20 @@ public class InetPeerAcceptors implements PeerAcceptors {
     }
 
     void releaseChannel(InetSocketAddress address, SocketChannel channel, boolean failed) {
-        if (channel == null) {
-            return;
-        }
-        busyChannels.get(address).remove(channel);
-        if (failed) {
-            try {
-                channel.close();
-            } catch (IOException e) {
-                logger.error("close channel failed.", e);
+        synchronized (lock) {
+            if (channel == null) {
+                return;
             }
-        } else {
-            idleChannels.get(address).add(channel);
+            busyChannels.get(address).remove(channel);
+            if (failed) {
+                try {
+                    channel.close();
+                } catch (IOException e) {
+                    logger.error("close channel failed.", e);
+                }
+            } else {
+                idleChannels.get(address).add(channel);
+            }
         }
     }
 }

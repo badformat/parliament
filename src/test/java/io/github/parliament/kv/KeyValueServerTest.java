@@ -35,7 +35,7 @@ class KeyValueServerTest {
     @BeforeAll
     static void beforeAll() throws Exception {
         ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
-        KeyValueEngine memKeyValueEngine = MemoryKeyValueEngine.builder()
+        KeyValueEngine engine = KeyValueEngine.builder()
                 .executorService(mock(ExecutorService.class))
                 .persistence(mock(Persistence.class))
                 .rsm(rsm)
@@ -50,7 +50,7 @@ class KeyValueServerTest {
 
         server = KeyValueServer.builder()
                 .socketAddress(new InetSocketAddress("127.0.0.1", 30000))
-                .keyValueEngine(memKeyValueEngine)
+                .keyValueEngine(engine)
                 .build();
         server.start();
         client = SocketChannel.open(server.getSocketAddress());

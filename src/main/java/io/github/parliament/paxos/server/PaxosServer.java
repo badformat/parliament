@@ -1,6 +1,13 @@
 package io.github.parliament.paxos.server;
 
 import io.github.parliament.paxos.Paxos;
+import io.github.parliament.paxos.acceptor.Accept;
+import io.github.parliament.paxos.acceptor.Acceptor;
+import io.github.parliament.paxos.acceptor.Prepare;
+import io.github.parliament.resp.RespArray;
+import io.github.parliament.resp.RespHandlerAttachment;
+import io.github.parliament.resp.RespReadHandler;
+import io.github.parliament.resp.RespWriteHandler;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -9,10 +16,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousChannelGroup;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 
 /**
@@ -41,13 +50,18 @@ public class PaxosServer {
         serverSocketChannel = AsynchronousServerSocketChannel.open(channelGroup);
         serverSocketChannel.bind(me);
 
+        PaxosRespReadHandler readHandler = new PaxosRespReadHandler();
+        RespWriteHandler writeHandler = new RespWriteHandler();
+
         serverSocketChannel.accept(paxos, new CompletionHandler<>() {
 
             @Override
             public void completed(AsynchronousSocketChannel channel, Paxos paxos) {
-                serverSocketChannel.accept(paxos, this);
-                PaxosProxyReadHandler handler = PaxosProxyReadHandler.builder().channel(channel).build();
-                channel.read(handler.getByteBuffer(), paxos, handler);
+                if (serverSocketChannel.isOpen()) {
+                    serverSocketChannel.accept(paxos, this);
+                }
+                RespHandlerAttachment attachment = new RespHandlerAttachment(channel, readHandler, writeHandler);
+                channel.read(attachment.getByteBuffer(), attachment, readHandler);
             }
 
             @Override
@@ -66,5 +80,41 @@ public class PaxosServer {
         serverSocketChannel.close();
         channelGroup.shutdown();
         started = false;
+    }
+
+    class PaxosRespReadHandler extends RespReadHandler {
+        @Override
+        protected ByteBuffer process(RespHandlerAttachment attachment, RespArray array) throws Exception {
+            ServerCodec codec = new ServerCodec();
+            ServerCodec.Request req = codec.decode(array);
+            Acceptor acceptor = paxos.create(req.getRound());
+
+            switch (req.getCmd()) {
+                case prepare:
+                    Prepare resp = acceptor.prepare(req.getN());
+                    return codec.encodePrepare(resp);
+                case accept:
+                    Accept acc = acceptor.accept(req.getN(), req.getV());
+                    return codec.encodeAccept(acc);
+                case decide:
+                    acceptor.decide(req.getV());
+                    return codec.encodeDecide();
+                case max:
+                    int max = paxos.max();
+                    return codec.encodeInt(max);
+                case min:
+                    int min = paxos.min();
+                    return codec.encodeInt(min);
+                case done:
+                    int done = paxos.done();
+                    return codec.encodeInt(done);
+                case pull:
+                    int rn = req.getRound();
+                    byte[] p = paxos.get(rn);
+                    return codec.encodeProposal(rn, Optional.ofNullable(p));
+                default:
+                    return codec.encodeError("unknown command :" + req.getCmd());
+            }
+        }
     }
 }
