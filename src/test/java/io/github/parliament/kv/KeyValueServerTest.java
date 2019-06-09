@@ -69,9 +69,9 @@ class KeyValueServerTest {
      */
     @Test
     void handlePutRequest() throws IOException {
-        sendReq("put", "any key", "any value");
         RespBulkString expected = RespBulkString.with("any value".getBytes());
         when(state.getOutput()).thenReturn(expected.toBytes());
+        sendReq("put", "any key", "any value");
         assertEquals(expected, receiveResp());
     }
 

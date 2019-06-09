@@ -85,7 +85,7 @@ class PaxosServerTest {
     @Test
     void concurrentCoordinate() {
         List<Integer> rounds = Stream.iterate(1, (i) -> i + 1)
-                .limit(100)
+                .limit(40)
                 .map(i -> round.getAndIncrement()).collect(Collectors.toList());
 
         rounds.stream().parallel().forEach(r -> {
@@ -111,7 +111,7 @@ class PaxosServerTest {
     @Test
     void forget() {
         concurrentCoordinate();
-        servers.stream().forEach(server -> {
+        servers.stream().parallel().forEach(server -> {
             try {
                 server.getPaxos().done(round.get());
             } catch (IOException e) {
@@ -119,7 +119,7 @@ class PaxosServerTest {
             }
         });
 
-        servers.stream().forEach(server -> {
+        servers.stream().parallel().forEach(server -> {
             try {
                 server.getPaxos().forget(round.get());
             } catch (IOException e) {
