@@ -1,5 +1,6 @@
 package io.github.parliament.kv;
 
+import com.google.common.base.Preconditions;
 import io.github.parliament.EventProcessor;
 import io.github.parliament.Persistence;
 import io.github.parliament.ReplicateStateMachine;
@@ -16,7 +17,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -67,21 +67,12 @@ public class KeyValueEngine implements EventProcessor {
         rsm.start(this, executorService);
     }
 
-    public Future<RespData> execute(byte[] bytes) throws UnknownKeyValueCommand, IOException, ExecutionException {
+    public Future<RespData> submit(byte[] bytes) throws UnknownKeyValueCommand, IOException, ExecutionException {
         RespDecoder decoder = new RespDecoder();
         decoder.decode(bytes);
         RespArray request = decoder.get();
 
-        if (request.size() == 0) {
-            throw new UnknownKeyValueCommand("empty command");
-        }
-
-        RespBulkString cmd = request.get(0);
-        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
-
-        if (!(Objects.equals(cmdStr, PUT_CMD) || Objects.equals(cmdStr, GET_CMD) || Objects.equals(cmdStr, DEL_CMD))) {
-            throw new UnknownKeyValueCommand("unknown command:" + cmdStr);
-        }
+        checkSubmitted(request);
 
         State state = rsm.state(bytes);
         CompletableFuture<State> future = rsm.submit(state);
@@ -93,49 +84,73 @@ public class KeyValueEngine implements EventProcessor {
                 }
                 return RespDecoder.create().decode(consensus.getOutput()).get();
             } catch (Exception e) {
-                logger.error("get execute result failed:", e);
-                return RespError.withUTF8("get execute result failed:" + e.getClass().getName()
+                logger.error("get submit result failed:", e);
+                return RespError.withUTF8("get submit result failed:" + e.getClass().getName()
                         + ",message:" + e.getMessage());
             }
         });
     }
 
-    <T> Future<T> execute1(byte[] bytes) throws Exception {
-        return (Future<T>) execute(bytes);
+    private void checkSubmitted(RespArray request) throws UnknownKeyValueCommand {
+        if (request.size() == 0) {
+            throw new UnknownKeyValueCommand("empty command");
+        }
+
+        RespBulkString cmd = request.get(0);
+        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
+
+        switch (cmdStr) {
+            case PUT_CMD:
+                Preconditions.checkState(request.get(1) instanceof RespBulkString);
+                Preconditions.checkState(request.get(2) instanceof RespBulkString);
+                break;
+            case GET_CMD:
+                Preconditions.checkState(request.get(1) instanceof RespBulkString);
+                break;
+            case DEL_CMD:
+                List<RespBulkString> keys = request.getDatas();
+                for (RespBulkString key : keys) {
+                    Preconditions.checkState(key instanceof RespBulkString);
+                }
+                break;
+            default:
+                throw new UnknownKeyValueCommand("unknown command:" + cmdStr);
+        }
+    }
+
+    <T> Future<T> submit1(byte[] bytes) throws Exception {
+        return (Future<T>) submit(bytes);
     }
 
     @Override
-    public byte[] process(byte[] content) {
-        RespArray request = RespDecoder.create().decode(content).get();
+    public void process(State state) throws IOException {
+        RespArray request = RespDecoder.create().decode(state.getContent()).get();
         RespBulkString cmd = request.get(0);
         String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
-        RespData ret = null;
+        RespData output = null;
 
-        try {
-            switch (cmdStr) {
-                case PUT_CMD:
-                    RespBulkString key = request.get(1);
-                    RespBulkString value = request.get(2);
-                    persistence.put(key.getContent(), value.getContent());
-                    ret = RespInteger.with(1);
-                    break;
-                case GET_CMD:
-                    key = request.get(1);
-                    byte[] v = persistence.get(key.getContent());
-                    ret = v == null ? RespBulkString.nullBulkString() : RespBulkString.with(v);
-                    break;
-                case DEL_CMD:
-                    List<RespBulkString> keys = request.getDatas();
-                    ret = RespInteger.with(del(keys.subList(1, keys.size())));
-                    break;
-                default:
-                    ret = RespError.withUTF8("Unknown key value command: " + cmdStr);
-            }
-        } catch (IOException e) {
-            logger.error("IO Exception:", e);
-            ret = RespError.withUTF8("IO Exception.");
+        switch (cmdStr) {
+            case PUT_CMD:
+                RespBulkString key = request.get(1);
+                RespBulkString value = request.get(2);
+                persistence.put(key.getContent(), value.getContent());
+                output = RespInteger.with(1);
+                break;
+            case GET_CMD:
+                key = request.get(1);
+                byte[] v = persistence.get(key.getContent());
+                output = v == null ? RespBulkString.nullBulkString() : RespBulkString.with(v);
+                break;
+            case DEL_CMD:
+                List<RespBulkString> keys = request.getDatas();
+                output = RespInteger.with(del(keys.subList(1, keys.size())));
+                break;
+            default:
+                output = RespError.withUTF8("Unknown key value command: " + cmdStr);
         }
-        return ret.toBytes();
+
+        state.setProcessed(true);
+        state.setOutput(output.toBytes());
     }
 
     int del(List<RespBulkString> keys) throws IOException {

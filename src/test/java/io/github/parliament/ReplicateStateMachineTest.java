@@ -23,7 +23,7 @@ class ReplicateStateMachineTest {
     private Sequence<Integer> sequence = new IntegerSequence();
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
         rsm = ReplicateStateMachine
                 .builder()
                 .persistence(persistence)
@@ -31,6 +31,11 @@ class ReplicateStateMachineTest {
                 .sequence(sequence)
                 .build();
         rsm.setEventProcessor(processor);
+        doAnswer((ctx) -> {
+            State state = (State) ctx.getArguments()[0];
+            state.setProcessed(true);
+            return null;
+        }).when(processor).process(any());
     }
 
     @AfterEach
@@ -42,8 +47,7 @@ class ReplicateStateMachineTest {
     @Test
     void submit() throws IOException,
             ExecutionException,
-            InterruptedException,
-            ClassNotFoundException {
+            InterruptedException {
         State submitted = rsm.state("content".getBytes());
         CompletableFuture<State> future = rsm.submit(submitted);
         rsm.follow();
@@ -57,7 +61,6 @@ class ReplicateStateMachineTest {
     void follow() throws IOException,
             ExecutionException,
             InterruptedException,
-            ClassNotFoundException,
             TimeoutException {
         CompletableFuture<State> f1 = rsm.submit(rsm.state("state1".getBytes()));
         CompletableFuture<State> f2 = rsm.submit(rsm.state("state2".getBytes()));
@@ -72,7 +75,7 @@ class ReplicateStateMachineTest {
     }
 
     @Test
-    void followInThread() throws InterruptedException {
+    void followInThread() throws InterruptedException, IOException {
         Thread t = new Thread(rsm);
         t.start();
         int i = 0;

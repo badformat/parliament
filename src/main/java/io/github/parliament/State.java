@@ -29,14 +29,14 @@ public class State implements Serializable {
     private byte[] content;
 
     @Getter
-    @Setter(AccessLevel.PACKAGE)
+    @Setter
     private byte[] output;
 
     /**
      * 事件内容是否已被处理
      */
     @Getter
-    @Setter(AccessLevel.PACKAGE)
+    @Setter
     @Builder.Default
     private boolean processed = false;
 

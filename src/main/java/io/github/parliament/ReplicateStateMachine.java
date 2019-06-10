@@ -96,28 +96,43 @@ public class ReplicateStateMachine implements Runnable {
         for (; ; ) {
             try {
                 follow();
-            } catch (IOException | ExecutionException | ClassNotFoundException e) {
-                logger.error("Failed in rsm follow().", e);
-            } catch (InterruptedException e) {
-                logger.info("RSM Thread is interrupted. exit.", e);
+            } catch (IOException e) {
+                logger.warn("IOException in RSM Thread.", e);
+            } catch (Exception e) {
+                logger.error("Unknown exception in RSM Thread.", e);
+            }
+            if (Thread.currentThread().isInterrupted()) {
+                logger.info("RSM Thread is interrupted.exit.");
                 return;
             }
         }
     }
 
-    void follow() throws ExecutionException, InterruptedException, IOException, ClassNotFoundException {
+    void follow() throws IOException {
         syncMaxAndSequence();
         int id = done() + 1;
-        Future<byte[]> instance = coordinator.instance(id);
-        State state = State.deserialize(instance.get());
+        Future<byte[]> instance = null;
+        State state = null;
+        try {
+            instance = coordinator.instance(id);
+            state = State.deserialize(instance.get());
+        } catch (ExecutionException | InterruptedException | IOException e) {
+            logger.error("Exception in coordinator.instance({})", id, e);
+            return;
+        } catch (ClassNotFoundException e) {
+            logger.error("deserialize RSM state（id: {}) failed.Can not continue.Server exit.", id, e);
+            System.exit(-1);
+        }
         try {
             writeRedoLog(done());
-            byte[] output = eventProcessor.process(state.getContent());
-            state.setProcessed(true);
-            state.setOutput(output);
-            CompletableFuture<State> future = futures.get(state.getId());
-            if (future != null) {
-                future.complete(state);
+            eventProcessor.process(state);
+            if (state.isProcessed()) {
+                CompletableFuture<State> future = futures.get(state.getId());
+                if (future != null) {
+                    future.complete(state);
+                }
+            } else {
+                return;
             }
 
             done(id);

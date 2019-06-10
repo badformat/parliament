@@ -17,7 +17,7 @@ import java.util.concurrent.Future;
 public interface Coordinator {
     void coordinate(int id, byte[] content) throws ExecutionException;
 
-    Future<byte[]> instance(int id) throws IOException, ExecutionException;
+    Future<byte[]> instance(int id) throws ExecutionException;
 
     void instance(int round, byte[] content) throws IOException;
 

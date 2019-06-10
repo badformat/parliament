@@ -33,7 +33,7 @@ public class MemoryKeyValueEngine extends KeyValueEngine {
     }
 
     @Override
-    public Future<RespData> execute(byte[] bytes) {
+    public Future<RespData> submit(byte[] bytes) {
         RespDecoder decoder = new RespDecoder();
         decoder.decode(bytes);
         RespArray request = decoder.get();

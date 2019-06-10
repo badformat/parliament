@@ -25,7 +25,7 @@ class MockPaxos implements Coordinator {
         if (states.containsKey(id)) {
             return CompletableFuture.completedFuture(states.get(id));
         }
-        waiting.put(id, new CompletableFuture<byte[]>());
+        waiting.put(id, new CompletableFuture<>());
         return waiting.get(id);
     }
 

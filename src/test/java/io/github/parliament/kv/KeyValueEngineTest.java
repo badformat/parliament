@@ -44,10 +44,12 @@ class KeyValueEngineTest {
     }
 
     @Test
-    void putAndGet() {
-        keyValueEngine.process(request("put", "key", "value"));
-        byte[] value = keyValueEngine.process(request("get", "key"));
-        RespBulkString s = RespDecoder.create().decode(value).get();
+    void putAndGet() throws IOException {
+        State state = requestState("put", "key", "value");
+        keyValueEngine.process(state);
+        state = requestState("get", "key");
+        keyValueEngine.process(state);
+        RespBulkString s = RespDecoder.create().decode(state.getOutput()).get();
 
         assertEquals("value", new String(s.getContent()));
     }
@@ -58,13 +60,12 @@ class KeyValueEngineTest {
         Stream.iterate(i, (k) -> k + 1).limit(200).parallel()
                 .map((n) -> {
                     try {
-                        byte[] output = keyValueEngine
-                                .process(request("put", "key" + n, "value" + n));
-                        assertArrayEquals(RespInteger.with(1).toBytes(), output);
-
-                        output = keyValueEngine
-                                .process(request("get", "key" + n));
-                        RespBulkString s = RespDecoder.create().decode(output).get();
+                        State state = requestState("put", "key" + n, "value" + n);
+                        keyValueEngine.process(state);
+                        assertArrayEquals(RespInteger.with(1).toBytes(), state.getOutput());
+                        state = requestState("get", "key" + n);
+                        keyValueEngine.process(state);
+                        RespBulkString s = RespDecoder.create().decode(state.getOutput()).get();
                         assertArrayEquals(("value" + n).getBytes(), s.getContent(), "fail at " + n);
                     } catch (Exception e) {
                         fail("fail at " + n, e);
@@ -86,7 +87,7 @@ class KeyValueEngineTest {
         when(consensus.getOutput()).thenReturn(RespInteger.with(2).toBytes());
 
         assertEquals(RespInteger.with(2),
-                keyValueEngine.execute1(request("get", "key")).get());
+                keyValueEngine.submit1(request("get", "key")).get());
     }
 
     @Test
@@ -100,7 +101,16 @@ class KeyValueEngineTest {
         when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(consensus));
 
         assertEquals(RespError.withUTF8("共识冲突"),
-                keyValueEngine.execute1(request("get", "key")).get());
+                keyValueEngine.submit1(request("get", "key")).get());
+    }
+
+    private State requestState(String cmd, String... args) {
+        List<RespData> datas = new ArrayList<>();
+        datas.add(RespBulkString.with(cmd.getBytes()));
+        datas.addAll(Arrays.stream(args).map(a -> RespBulkString.with(a.getBytes())).collect(Collectors.toList()));
+        byte[] content = RespArray.with(datas).toBytes();
+
+        return State.builder().content(content).id(1).uuid("uuid".getBytes()).build();
     }
 
     private byte[] request(String cmd, String... args) {

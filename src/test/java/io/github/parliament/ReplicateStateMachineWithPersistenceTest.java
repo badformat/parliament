@@ -14,6 +14,8 @@ import java.util.concurrent.*;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 
 class ReplicateStateMachineWithPersistenceTest {
@@ -40,6 +42,11 @@ class ReplicateStateMachineWithPersistenceTest {
                 .sequence(sequence)
                 .build();
         ret.setEventProcessor(processor);
+        doAnswer((ctx) -> {
+            State state = (State) ctx.getArguments()[0];
+            state.setProcessed(true);
+            return null;
+        }).when(processor).process(any());
         return ret;
     }
 

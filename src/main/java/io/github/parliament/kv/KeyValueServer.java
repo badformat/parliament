@@ -44,7 +44,7 @@ public class KeyValueServer {
         RespReadHandler respReadHandler = new RespReadHandler() {
             @Override
             protected ByteBuffer process(RespHandlerAttachment attachment, RespArray request) throws Exception {
-                return engine.execute(request.toBytes())
+                return engine.submit(request.toBytes())
                         .get(attachment.getTimeOutMills(), TimeUnit.MILLISECONDS)
                         .toByteBuffer();
             }
