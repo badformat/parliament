@@ -79,7 +79,8 @@ class KeyValueServerTest {
     @Test
     void handleInvalidRequest() throws IOException {
         sendReq("unknown");
-        assertTrue(receiveResp() instanceof RespError);
+        RespArray a = (RespArray) receiveResp();
+        assertTrue(a.get(0) instanceof RespError);
     }
 
     @Test

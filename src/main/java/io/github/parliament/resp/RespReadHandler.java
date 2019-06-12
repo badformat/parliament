@@ -34,7 +34,8 @@ public abstract class RespReadHandler implements CompletionHandler<Integer, Resp
             }
         } catch (Exception e) {
             logger.error("read handler exception in completed().", e);
-            response = RespError.withUTF8("read handler exception:" + e.getClass().getName()).toByteBuffer();
+            response = RespArray.with(
+                    RespError.withUTF8("read handler exception:" + e.getClass().getName())).toByteBuffer();
         } finally {
             if (response != null) {
                 RespHandlerAttachment writeAttachment = new RespHandlerAttachment(attachment, response);

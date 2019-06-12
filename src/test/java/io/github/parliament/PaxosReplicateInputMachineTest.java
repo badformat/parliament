@@ -170,7 +170,9 @@ class PaxosReplicateInputMachineTest {
             try {
                 Output output1 = f.get(1, TimeUnit.SECONDS);
                 Output output2 = other.getTransforms().get(output1.getId()).get(1, TimeUnit.SECONDS);
-                assertEquals(output1, output2);
+                assertEquals(output1.getId(), output2.getId());
+                assertEquals(new String(output1.getContent()), new String(output2.getContent()));
+                assertArrayEquals(output1.getUuid(), output2.getUuid());
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 fail(e);
             }
