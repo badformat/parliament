@@ -16,12 +16,12 @@ public abstract class LocalAcceptor implements Acceptor {
     @Getter
     private byte[] va;
 
-    public LocalAcceptor(int round) {
+    protected LocalAcceptor(int round) {
         this.round = round;
     }
 
     @Override
-    public Prepare prepare(String n) {
+    public synchronized Prepare prepare(String n) {
         if (np == null || n.compareTo(np) >= 0) {
             np = n;
             return Prepare.ok(n, na, va);
@@ -30,7 +30,7 @@ public abstract class LocalAcceptor implements Acceptor {
     }
 
     @Override
-    public Accept accept(String n, byte[] value) {
+    public synchronized Accept accept(String n, byte[] value) {
         if (np == null) {
             return Accept.reject(n);
         }
