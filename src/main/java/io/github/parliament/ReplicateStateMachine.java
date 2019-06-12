@@ -1,7 +1,9 @@
 package io.github.parliament;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.MapMaker;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,21 +27,31 @@ import java.util.concurrent.*;
  *
  * @author zy
  */
-public class ReplicateStateMachine implements Runnable {
+public class ReplicateStateMachine {
     static final byte[] RSM_DONE_REDO = "rsm_done_redo".getBytes();
     static final byte[] RSM_DONE = "rsm_done".getBytes();
 
     private static final Logger logger = LoggerFactory.getLogger(ReplicateStateMachine.class);
+    @Getter(AccessLevel.PACKAGE)
+    private final LoadingCache<Integer, CompletableFuture<Output>> transforms = CacheBuilder.newBuilder()
+            .weakValues()
+            .build(new CacheLoader<>() {
+                @Override
+                public CompletableFuture<Output> load(Integer key) {
+                    return new CompletableFuture<>();
+                }
+            });
     @Setter(AccessLevel.PACKAGE)
-    private EventProcessor eventProcessor;
+    private StateTransfer stateTransfer;
     @Getter(AccessLevel.PACKAGE)
     private Persistence persistence;
     private Sequence<Integer> sequence;
+    @Getter(AccessLevel.PACKAGE)
     private Coordinator coordinator;
     private volatile Integer done = -1;
     private volatile Integer max = -1;
-    private ConcurrentMap<Integer, CompletableFuture<State>> futures = new MapMaker().weakValues().makeMap();
-    private volatile int forgetThreshold = 0;
+    private volatile int threshold = 0;
+    private volatile boolean stop = false;
 
     @Builder
     private ReplicateStateMachine(@NonNull Persistence persistence,
@@ -50,8 +62,8 @@ public class ReplicateStateMachine implements Runnable {
         this.coordinator = coordinator;
     }
 
-    public void start(EventProcessor processor, Executor executor) throws IOException {
-        this.eventProcessor = processor;
+    public void start(StateTransfer transfer, Executor executor) throws IOException {
+        this.stateTransfer = transfer;
         Integer d = getRedoLog();
         if (d != null) {
             this.done = d;
@@ -64,7 +76,29 @@ public class ReplicateStateMachine implements Runnable {
             }
         }
         sequence.set(this.done + 1);
-        executor.execute(this);
+        stop = false;
+        executor.execute(() -> {
+            for (; ; ) {
+                if (stop) {
+                    return;
+                }
+                try {
+                    apply();
+                } catch (IOException e) {
+                    logger.warn("IOException in RSM Thread.", e);
+                } catch (Exception e) {
+                    logger.error("Unknown exception in RSM Thread.", e);
+                }
+                if (Thread.currentThread().isInterrupted()) {
+                    logger.info("RSM Thread is interrupted.exit.");
+                    return;
+                }
+            }
+        });
+    }
+
+    void stop() {
+        this.stop = true;
     }
 
     /**
@@ -73,77 +107,75 @@ public class ReplicateStateMachine implements Runnable {
      * @param content
      * @return event
      */
-    public State state(byte[] content) throws DuplicateKeyException {
-        syncMaxAndSequence();
-        State state = State.builder()
+    public Input newState(byte[] content) throws DuplicateKeyException {
+        Input input = Input.builder()
                 .id(next())
                 .uuid(uuid())
                 .content(content)
                 .build();
-        return state;
+        return input;
     }
 
-    public CompletableFuture<State> submit(State state) throws IOException, ExecutionException {
-        Preconditions.checkState(!futures.containsKey(state.getId()),
-                "instance id " + state.getId() + " already exists.");
-        CompletableFuture<State> future = futures.computeIfAbsent(state.getId(), (k) -> new CompletableFuture<>());
-        coordinator.coordinate(state.getId(), State.serialize(state));
-        return future;
+    public CompletableFuture<Output> submit(Input input) throws IOException, ExecutionException {
+        Preconditions.checkState(input.getId() <= sequence.current(),
+                "Instance id: " + input.getId() + " > sequence current value: " + sequence.current());
+        coordinator.coordinate(input.getId(), Input.serialize(input));
+        return transforms.get(input.getId());
     }
 
-    @Override
-    public void run() {
-        for (; ; ) {
-            try {
-                follow();
-            } catch (IOException e) {
-                logger.warn("IOException in RSM Thread.", e);
-            } catch (Exception e) {
-                logger.error("Unknown exception in RSM Thread.", e);
-            }
-            if (Thread.currentThread().isInterrupted()) {
-                logger.info("RSM Thread is interrupted.exit.");
-                return;
-            }
-        }
-    }
-
-    void follow() throws IOException {
-        syncMaxAndSequence();
+    void apply() throws IOException {
         int id = done() + 1;
-        Future<byte[]> instance = null;
-        State state = null;
+        Future<byte[]> inputFuture = null;
+        Input input = null;
+        CompletableFuture<Output> transform = null;
         try {
-            instance = coordinator.instance(id);
-            state = State.deserialize(instance.get());
+            inputFuture = coordinator.instance(id);
+            input = Input.deserialize(inputFuture.get(100, TimeUnit.MILLISECONDS));
+            transform = transforms.get(input.getId());
         } catch (ExecutionException | InterruptedException | IOException e) {
             logger.error("Exception in coordinator.instance({})", id, e);
             return;
+        } catch (TimeoutException e) {
+            keepUp();
+            return;
         } catch (ClassNotFoundException e) {
-            logger.error("deserialize RSM state（id: {}) failed.Can not continue.Server exit.", id, e);
+            logger.error("deserialize RSM input（id: {}) failed.Can not continue.Server exit.", id, e);
             System.exit(-1);
         }
+
         try {
             writeRedoLog(done());
-            eventProcessor.process(state);
-            if (state.isProcessed()) {
-                CompletableFuture<State> future = futures.get(state.getId());
-                if (future != null) {
-                    future.complete(state);
-                }
-            } else {
+            try {
+                Output output = stateTransfer.transform(input);
+                transform.complete(output);
+                logger.debug("complete input: {}", input);
+            } catch (Exception e) {
+                logger.error("Exception thrown by eventProcess.transform for instance {}", input.getId(), e);
                 return;
             }
-
             done(id);
-
-            forgetThreshold++;
-            if (forgetThreshold > 100) {
-                forgetThreshold = 0;
-                coordinator.forget(done());
-            }
+            syncMaxAndSequence();
+            forget();
         } finally {
             removeRedoLog();
+        }
+    }
+
+    private void forget() throws IOException {
+        threshold++;
+        if (threshold > 100) {
+            threshold = 0;
+            coordinator.forget(done());
+        }
+    }
+
+    private void keepUp() throws IOException {
+        int begin = done() + 1;
+        Preconditions.checkState(begin >= 0);
+        int end = coordinator.max();
+        while (begin <= end) {
+            coordinator.learn(begin);
+            begin++;
         }
     }
 
@@ -173,8 +205,12 @@ public class ReplicateStateMachine implements Runnable {
         return UUID.randomUUID().toString().getBytes();
     }
 
-    private int next() {
+    private synchronized int next() {
         return sequence.next();
+    }
+
+    int current() {
+        return sequence.current();
     }
 
     private Integer getRedoLog() throws IOException {
@@ -198,10 +234,11 @@ public class ReplicateStateMachine implements Runnable {
         persistence.put(RSM_DONE_REDO, ByteBuffer.allocate(4).putInt(id).array());
     }
 
-    private void syncMaxAndSequence() {
+    private synchronized void syncMaxAndSequence() {
         max(coordinator.max());
-        if (max() > sequence.current()) {
-            sequence.set(max);
+        if (max() >= sequence.current()) {
+            logger.debug("update sequence value to:{}", max + 1);
+            sequence.set(max + 1);
         }
     }
 }

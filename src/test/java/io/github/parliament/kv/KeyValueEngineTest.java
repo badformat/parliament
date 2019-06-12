@@ -1,9 +1,6 @@
 package io.github.parliament.kv;
 
-import io.github.parliament.MockPersistence;
-import io.github.parliament.Persistence;
-import io.github.parliament.ReplicateStateMachine;
-import io.github.parliament.State;
+import io.github.parliament.*;
 import io.github.parliament.resp.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,11 +42,11 @@ class KeyValueEngineTest {
 
     @Test
     void putAndGet() throws IOException {
-        State state = requestState("put", "key", "value");
-        keyValueEngine.process(state);
-        state = requestState("get", "key");
-        keyValueEngine.process(state);
-        RespBulkString s = RespDecoder.create().decode(state.getOutput()).get();
+        Input input = requestState("put", "key", "value");
+        keyValueEngine.transform(input);
+        input = requestState("get", "key");
+        Output o = keyValueEngine.transform(input);
+        RespBulkString s = RespDecoder.create().decode(o.getContent()).get();
 
         assertEquals("value", new String(s.getContent()));
     }
@@ -60,12 +57,12 @@ class KeyValueEngineTest {
         Stream.iterate(i, (k) -> k + 1).limit(200).parallel()
                 .map((n) -> {
                     try {
-                        State state = requestState("put", "key" + n, "value" + n);
-                        keyValueEngine.process(state);
-                        assertArrayEquals(RespInteger.with(1).toBytes(), state.getOutput());
-                        state = requestState("get", "key" + n);
-                        keyValueEngine.process(state);
-                        RespBulkString s = RespDecoder.create().decode(state.getOutput()).get();
+                        Input input = requestState("put", "key" + n, "value" + n);
+                        Output o = keyValueEngine.transform(input);
+                        assertArrayEquals(RespInteger.with(1).toBytes(), o.getContent());
+                        input = requestState("get", "key" + n);
+                        o = keyValueEngine.transform(input);
+                        RespBulkString s = RespDecoder.create().decode(o.getContent()).get();
                         assertArrayEquals(("value" + n).getBytes(), s.getContent(), "fail at " + n);
                     } catch (Exception e) {
                         fail("fail at " + n, e);
@@ -76,15 +73,15 @@ class KeyValueEngineTest {
 
     @Test
     void execute() throws Exception {
-        State original = mock(State.class);
+        Input original = mock(Input.class);
         when(original.getId()).thenReturn(1);
         when(original.getUuid()).thenReturn("uuid".getBytes());
-        when(rsm.state(any())).thenReturn(original);
+        when(rsm.newState(any())).thenReturn(original);
 
-        State consensus = mock(State.class);
-        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(consensus));
-        when(consensus.getUuid()).thenReturn("uuid".getBytes());
-        when(consensus.getOutput()).thenReturn(RespInteger.with(2).toBytes());
+        Output output = mock(Output.class);
+        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(output));
+        when(output.getUuid()).thenReturn("uuid".getBytes());
+        when(output.getContent()).thenReturn(RespInteger.with(2).toBytes());
 
         assertEquals(RespInteger.with(2),
                 keyValueEngine.submit1(request("get", "key")).get());
@@ -92,25 +89,25 @@ class KeyValueEngineTest {
 
     @Test
     void conflict() throws Exception {
-        State original = mock(State.class);
+        Input original = mock(Input.class);
         when(original.getId()).thenReturn(1);
         when(original.getUuid()).thenReturn("tag1".getBytes());
-        when(rsm.state(any())).thenReturn(original);
+        when(rsm.newState(any())).thenReturn(original);
 
-        State consensus = mock(State.class);
-        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(consensus));
+        Output output = mock(Output.class);
+        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(output));
 
         assertEquals(RespError.withUTF8("共识冲突"),
                 keyValueEngine.submit1(request("get", "key")).get());
     }
 
-    private State requestState(String cmd, String... args) {
+    private Input requestState(String cmd, String... args) {
         List<RespData> datas = new ArrayList<>();
         datas.add(RespBulkString.with(cmd.getBytes()));
         datas.addAll(Arrays.stream(args).map(a -> RespBulkString.with(a.getBytes())).collect(Collectors.toList()));
         byte[] content = RespArray.with(datas).toBytes();
 
-        return State.builder().content(content).id(1).uuid("uuid".getBytes()).build();
+        return Input.builder().content(content).id(1).uuid("uuid".getBytes()).build();
     }
 
     private byte[] request(String cmd, String... args) {

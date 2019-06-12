@@ -7,7 +7,7 @@ import java.io.*;
 @EqualsAndHashCode
 @ToString
 @Builder
-public class State implements Serializable {
+public class Input implements Serializable {
     final static long serialVersionUID = 1L;
     /**
      * 状态机事件id，在状态流中的唯一标识
@@ -28,30 +28,18 @@ public class State implements Serializable {
     @NonNull
     private byte[] content;
 
-    @Getter
-    @Setter
-    private byte[] output;
-
-    /**
-     * 事件内容是否已被处理
-     */
-    @Getter
-    @Setter
-    @Builder.Default
-    private boolean processed = false;
-
-    public static byte[] serialize(State state) throws IOException {
+    public static byte[] serialize(Input input) throws IOException {
         ByteArrayOutputStream os = new ByteArrayOutputStream();
         try (ObjectOutputStream oos = new ObjectOutputStream(os)) {
-            oos.writeObject(state);
+            oos.writeObject(input);
         }
         return os.toByteArray();
     }
 
-    public static State deserialize(byte[] bytes) throws IOException, ClassNotFoundException {
+    public static Input deserialize(byte[] bytes) throws IOException, ClassNotFoundException {
         ByteArrayInputStream is = new ByteArrayInputStream(bytes);
         try (ObjectInputStream ois = new ObjectInputStream(is)) {
-            return (State) ois.readObject();
+            return (Input) ois.readObject();
         }
     }
 }

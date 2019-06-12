@@ -1,10 +1,7 @@
 package io.github.parliament.kv;
 
 import com.google.common.base.Preconditions;
-import io.github.parliament.EventProcessor;
-import io.github.parliament.Persistence;
-import io.github.parliament.ReplicateStateMachine;
-import io.github.parliament.State;
+import io.github.parliament.*;
 import io.github.parliament.resp.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -43,7 +40,7 @@ import java.util.concurrent.Future;
  *
  * @author zy
  */
-public class KeyValueEngine implements EventProcessor {
+public class KeyValueEngine implements StateTransfer {
     private static final Logger logger = LoggerFactory.getLogger(KeyValueEngine.class);
     private static final String PUT_CMD = "put";
     private static final String GET_CMD = "get";
@@ -74,15 +71,15 @@ public class KeyValueEngine implements EventProcessor {
 
         checkSubmitted(request);
 
-        State state = rsm.state(bytes);
-        CompletableFuture<State> future = rsm.submit(state);
+        Input input = rsm.newState(bytes);
+        CompletableFuture<Output> future = rsm.submit(input);
 
-        return future.thenApply((consensus) -> {
+        return future.thenApply((output) -> {
             try {
-                if (!Arrays.equals(state.getUuid(), consensus.getUuid())) {
+                if (!Arrays.equals(input.getUuid(), output.getUuid())) {
                     return RespError.withUTF8("共识冲突");
                 }
-                return RespDecoder.create().decode(consensus.getOutput()).get();
+                return RespDecoder.create().decode(output.getContent()).get();
             } catch (Exception e) {
                 logger.error("get submit result failed:", e);
                 return RespError.withUTF8("get submit result failed:" + e.getClass().getName()
@@ -122,37 +119,6 @@ public class KeyValueEngine implements EventProcessor {
         return (Future<T>) submit(bytes);
     }
 
-    @Override
-    public void process(State state) throws IOException {
-        RespArray request = RespDecoder.create().decode(state.getContent()).get();
-        RespBulkString cmd = request.get(0);
-        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
-        RespData output = null;
-
-        switch (cmdStr) {
-            case PUT_CMD:
-                RespBulkString key = request.get(1);
-                RespBulkString value = request.get(2);
-                persistence.put(key.getContent(), value.getContent());
-                output = RespInteger.with(1);
-                break;
-            case GET_CMD:
-                key = request.get(1);
-                byte[] v = persistence.get(key.getContent());
-                output = v == null ? RespBulkString.nullBulkString() : RespBulkString.with(v);
-                break;
-            case DEL_CMD:
-                List<RespBulkString> keys = request.getDatas();
-                output = RespInteger.with(del(keys.subList(1, keys.size())));
-                break;
-            default:
-                output = RespError.withUTF8("Unknown key value command: " + cmdStr);
-        }
-
-        state.setProcessed(true);
-        state.setOutput(output.toBytes());
-    }
-
     int del(List<RespBulkString> keys) throws IOException {
         int deleted = 0;
         for (RespBulkString key : keys) {
@@ -161,5 +127,39 @@ public class KeyValueEngine implements EventProcessor {
             }
         }
         return deleted;
+    }
+
+    @Override
+    public Output transform(Input input) throws IOException {
+        RespArray request = RespDecoder.create().decode(input.getContent()).get();
+        RespBulkString cmd = request.get(0);
+        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
+        RespData resp = null;
+
+        switch (cmdStr) {
+            case PUT_CMD:
+                RespBulkString key = request.get(1);
+                RespBulkString value = request.get(2);
+                persistence.put(key.getContent(), value.getContent());
+                resp = RespInteger.with(1);
+                break;
+            case GET_CMD:
+                key = request.get(1);
+                byte[] v = persistence.get(key.getContent());
+                resp = v == null ? RespBulkString.nullBulkString() : RespBulkString.with(v);
+                break;
+            case DEL_CMD:
+                List<RespBulkString> keys = request.getDatas();
+                resp = RespInteger.with(del(keys.subList(1, keys.size())));
+                break;
+            default:
+                resp = RespError.withUTF8("Unknown key value command: " + cmdStr);
+        }
+
+        return Output.builder()
+                .content(resp.toBytes())
+                .id(input.getId())
+                .uuid(input.getUuid())
+                .build();
     }
 }

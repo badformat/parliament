@@ -9,12 +9,12 @@ import com.google.common.collect.MapMaker;
 import io.github.parliament.Coordinator;
 import io.github.parliament.Persistence;
 import io.github.parliament.Sequence;
-import io.github.parliament.paxos.acceptor.Acceptor;
-import io.github.parliament.paxos.acceptor.LocalAcceptor;
-import io.github.parliament.paxos.acceptor.LocalAcceptors;
+import io.github.parliament.paxos.acceptor.*;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import io.github.parliament.paxos.proposer.Proposer;
+import lombok.AccessLevel;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,13 +32,13 @@ public class Paxos implements Coordinator, LocalAcceptors {
             .weakValues()
             .makeMap();
     private final Cache<Integer, LocalAcceptor> acceptors = CacheBuilder.newBuilder()
-            .expireAfterWrite(120, TimeUnit.SECONDS)
+            .weakValues()
             .build();
     private final LoadingCache<Integer, CompletableFuture<byte[]>> proposals = CacheBuilder.newBuilder()
-            .expireAfterWrite(120, TimeUnit.SECONDS)
+            .weakValues()
             .build(new CacheLoader<>() {
                 @Override
-                public CompletableFuture<byte[]> load(Integer key) throws Exception {
+                public CompletableFuture<byte[]> load(Integer key) {
                     return new CompletableFuture<>();
                 }
             });
@@ -78,15 +78,21 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
     @Override
     public void coordinate(int round, byte[] content) throws ExecutionException {
+        byte[] agreement = get(round);
+        if (agreement != null) {
+            proposals.get(round).complete(agreement);
+            return;
+        }
         List<Acceptor> peers = new ArrayList<>();
         Acceptor me = create(round);
         List<? extends Acceptor> others = peers(round);
         peers.addAll(others);
         peers.add(me);
         Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer(peers, sequence, content));
-        proposals.get(round).completeAsync(() -> proposer.propose((result) -> {
+
+        executorService.submit(() -> proposer.propose((result) -> {
             peerAcceptors.release(round);
-        }), executorService);
+        }));
     }
 
     @Override
@@ -118,6 +124,15 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
+    public void learn(int round) throws IOException {
+        byte[] content = peerAcceptors.learn(round);
+        if (content == null) {
+            return;
+        }
+        checkAndPut(round, content);
+    }
+
+    @Override
     public int done() {
         return done;
     }
@@ -141,44 +156,87 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
     @Override
     public void forget(int before) throws IOException {
-        Preconditions.checkState(before <= done);
-        int other = peerAcceptors.done();
-        int cursor = Math.min(before, other);
-        if (cursor < 0) {
-            return;
+        synchronized (this) {
+            if (before > done) {
+                return;
+            }
+            int other = peerAcceptors.done();
+            int cursor = Math.min(before, other);
+            if (cursor < min) {
+                logger.warn("forgotten others not finished states.It's impossible.A Bug?");
+                return;
+            }
+            int min1 = cursor;
+            if (cursor < 0) {
+                return;
+            }
+            int m = Math.max(0, min());
+            do {
+                persistence.remove(ByteBuffer.allocate(4).putInt(cursor).array());
+                cursor--;
+            } while (cursor >= 0 && cursor > m);
+            min(min1);
         }
-        min(cursor + 1);
-        boolean existed;
-        do {
-            existed = persistence.remove(ByteBuffer.allocate(4).putInt(cursor).array());
-            cursor--;
-        } while (existed && cursor >= 0);
     }
 
     List<? extends Acceptor> peers(int round) {
         return peerAcceptors.create(round);
     }
 
+    @Builder
+    private static class FinishedAcceptor implements Acceptor {
+        @NonNull
+        @Getter(AccessLevel.PRIVATE)
+        private byte[] finished;
+
+        @Override
+        public Prepare prepare(String n) {
+            return Prepare.reject(n);
+        }
+
+        @Override
+        public Accept accept(String n, byte[] value) {
+            return Accept.reject(n);
+        }
+
+        @Override
+        public void decide(byte[] agreement) {
+            if (!Arrays.equals(finished, agreement)) {
+                logger.error("Instance is already decided, but later consensus is different.A bug?");
+                throw new IllegalStateException("Instance is already decided, but later consensus is different");
+            }
+        }
+    }
+
     @Override
     public Acceptor create(int round) throws ExecutionException {
+        byte[] consensus = get(round);
+        if (consensus != null) {
+            proposals.get(round).complete(consensus);
+            return FinishedAcceptor.builder()
+                    .finished(consensus).build();
+        }
+
         return acceptors.get(round, () -> new LocalAcceptor(round) {
             @Override
             public void decide(byte[] agreement) throws Exception {
+                checkAndPut(round, agreement);
                 if (round > max) {
                     max(round);
                 }
-                CompletableFuture<byte[]> future = proposals.get(round);
-                if (future != null && !future.isDone()) {
-                    future.complete(agreement);
-                }
-                byte[] r = get(round);
-                if (r != null) {
-                    Preconditions.checkState(Arrays.equals(r, agreement), "decided value is not equals.");
-                } else {
-                    put(round, agreement);
-                }
+                proposals.get(round).complete(agreement);
             }
         });
+    }
+
+    private void checkAndPut(int round, byte[] agreement) throws IOException {
+        Preconditions.checkNotNull(agreement);
+        byte[] r = get(round);
+        if (r != null) {
+            Preconditions.checkState(Arrays.equals(r, agreement), "decided value is not equals.");
+        } else {
+            put(round, agreement);
+        }
     }
 
     public byte[] get(int round) {

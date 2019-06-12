@@ -119,7 +119,26 @@ public class InetPeerAcceptors implements PeerAcceptors {
         return done;
     }
 
+    @Override
+    public byte[] learn(int round) {
+        List<SyncProxyAcceptor> others = create0(-1);
+        for (SyncProxyAcceptor other : others) {
+            byte[] agreement = null;
+            try {
+                agreement = other.pull(round);
+            } catch (IOException e) {
+                logger.error("IOException in learn round {}", round, e);
+                continue;
+            }
+            if (agreement != null) {
+                return agreement;
+            }
+        }
+        return null;
+    }
+
     Object lock = new Object();
+
     SocketChannel acquireChannel(InetSocketAddress address) throws IOException, NoConnectionInPool {
         synchronized (lock) {
             idleChannels.putIfAbsent(address, new ArrayDeque<>());

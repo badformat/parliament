@@ -1,9 +1,6 @@
 package io.github.parliament.kv;
 
-import io.github.parliament.Application;
-import io.github.parliament.Persistence;
-import io.github.parliament.ReplicateStateMachine;
-import io.github.parliament.State;
+import io.github.parliament.*;
 import io.github.parliament.resp.*;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,7 +27,8 @@ class KeyValueServerTest {
     private static KeyValueServer server;
     private static SocketChannel client;
     private static RespDecoder respDecoder = RespDecoder.create();
-    private static volatile State state = mock(State.class);
+    private static volatile Output output = mock(Output.class);
+    private static volatile Input input = mock(Input.class);
 
     @BeforeAll
     static void beforeAll() throws Exception {
@@ -41,12 +39,14 @@ class KeyValueServerTest {
                 .rsm(rsm)
                 .build();
 
-        when(state.getOutput()).thenReturn(RespInteger.with(1).toBytes());
-        when(state.getId()).thenReturn(1);
-        when(state.getUuid()).thenReturn("uuid".getBytes());
-        when(rsm.state(any())).thenReturn(state);
+        when(output.getContent()).thenReturn(RespInteger.with(1).toBytes());
+        when(output.getId()).thenReturn(1);
+        when(output.getUuid()).thenReturn("uuid".getBytes());
+        when(input.getUuid()).thenReturn("uuid".getBytes());
 
-        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(state));
+        when(rsm.newState(any())).thenReturn(input);
+
+        when(rsm.submit(any())).thenReturn(CompletableFuture.completedFuture(output));
 
         server = KeyValueServer.builder()
                 .socketAddress(new InetSocketAddress("127.0.0.1", 30000))
@@ -70,7 +70,8 @@ class KeyValueServerTest {
     @Test
     void handlePutRequest() throws IOException {
         RespBulkString expected = RespBulkString.with("any value".getBytes());
-        when(state.getOutput()).thenReturn(expected.toBytes());
+        when(output.getContent()).thenReturn(expected.toBytes());
+
         sendReq("put", "any key", "any value");
         assertEquals(expected, receiveResp());
     }
@@ -84,7 +85,7 @@ class KeyValueServerTest {
     @Test
     void handleGet() throws IOException {
         RespBulkString expected = RespBulkString.with("value1".getBytes());
-        when(state.getOutput()).thenReturn(expected.toBytes());
+        when(output.getContent()).thenReturn(expected.toBytes());
 
         sendReq("put", "key1", "value1");
         receiveResp();

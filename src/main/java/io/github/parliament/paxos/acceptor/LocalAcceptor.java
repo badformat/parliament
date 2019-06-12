@@ -22,7 +22,7 @@ public abstract class LocalAcceptor implements Acceptor {
 
     @Override
     public Prepare prepare(String n) {
-        if (np == null || n.compareTo(np) >= 0) {
+        if (np == null || n.compareTo(np) > 0) {
             np = n;
             return Prepare.ok(n, na, va);
         }

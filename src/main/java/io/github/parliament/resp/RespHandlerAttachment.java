@@ -13,7 +13,7 @@ public class RespHandlerAttachment {
     @Getter
     private volatile RespDecoder respDecoder;
     @Getter
-    private int timeOutMills = 1000;
+    private int timeOutMills = 3000;
     @Getter
     private RespReadHandler respReadHandler;
     @Getter

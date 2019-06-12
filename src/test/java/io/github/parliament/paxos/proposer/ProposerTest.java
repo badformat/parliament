@@ -51,13 +51,13 @@ class ProposerTest {
 
     @Test
     void majority() {
-        assertEquals(1, proposer.calcMajority(1));
-        assertEquals(2, proposer.calcMajority(2));
-        assertEquals(2, proposer.calcMajority(3));
-        assertEquals(3, proposer.calcMajority(4));
-        assertEquals(3, proposer.calcMajority(5));
-        assertEquals(4, proposer.calcMajority(6));
-        assertEquals(4, proposer.calcMajority(7));
+        assertEquals(1, proposer.quorum(1));
+        assertEquals(2, proposer.quorum(2));
+        assertEquals(2, proposer.quorum(3));
+        assertEquals(3, proposer.quorum(4));
+        assertEquals(3, proposer.quorum(5));
+        assertEquals(4, proposer.quorum(6));
+        assertEquals(4, proposer.quorum(7));
     }
 
     @Test

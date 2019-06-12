@@ -19,7 +19,7 @@ public interface Coordinator {
 
     Future<byte[]> instance(int id) throws ExecutionException;
 
-    void instance(int round, byte[] content) throws IOException;
+    void instance(int id, byte[] content) throws IOException;
 
     int min();
 
@@ -33,5 +33,7 @@ public interface Coordinator {
 
     void forget(int before) throws IOException;
 
-    byte[] get(int round);
+    byte[] get(int id);
+
+    void learn(int id) throws IOException;
 }

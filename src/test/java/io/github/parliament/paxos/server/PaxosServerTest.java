@@ -6,11 +6,13 @@ import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,6 +26,7 @@ class PaxosServerTest {
     private static List<InetSocketAddress> addresses;
     private static List<Paxos> paxosList = new ArrayList<>();
     private static Paxos me;
+    private static Paxos other;
     private static byte[] content = "content".getBytes();
     private static volatile AtomicInteger round = new AtomicInteger();
 
@@ -37,13 +40,8 @@ class PaxosServerTest {
             try {
                 ArrayList<InetSocketAddress> peers = new ArrayList<>(addresses);
                 peers.remove(address);
-                InetPeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(100).build();
-                ExecutorService executorService = new ThreadPoolExecutor(
-                        3,
-                        30,
-                        10,
-                        TimeUnit.MILLISECONDS,
-                        new ArrayBlockingQueue<>(100));
+                InetPeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(300).build();
+                ExecutorService executorService = Executors.newCachedThreadPool();
                 Paxos paxos = Paxos.builder()
                         .peerAcceptors(acceptors)
                         .executorService(executorService)
@@ -62,6 +60,7 @@ class PaxosServerTest {
         }).collect(Collectors.toList());
 
         me = paxosList.get(0);
+        other = paxosList.get(1);
 
         for (PaxosServer server : servers) {
             server.start();
@@ -82,7 +81,7 @@ class PaxosServerTest {
         assertArrayEquals(content, me.instance(i).get());
     }
 
-    @Test
+    @RepeatedTest(10)
     void concurrentCoordinate() {
         List<Integer> rounds = Stream.iterate(1, (i) -> i + 1)
                 .limit(40)
@@ -96,13 +95,31 @@ class PaxosServerTest {
                 fail("failed at " + r, e);
             }
         });
-        
+
         rounds.stream().parallel().forEach(r -> {
             try {
                 byte[] actual = me.instance(r).get(3, TimeUnit.SECONDS);
                 assertArrayEquals(("content" + r).getBytes(), actual,
                         "actual: " + new String(actual) + ",expected:content" + r);
             } catch (InterruptedException | TimeoutException | ExecutionException e) {
+                fail(e);
+            }
+        });
+    }
+
+    @RepeatedTest(10)
+    void coordinateByTurn() {
+        Stream.iterate(1, i -> i + 1).limit(30).parallel().forEach(i -> {
+            try {
+                int r = round.getAndIncrement();
+                me.coordinate(r, ("my content" + i).getBytes());
+                other.coordinate(r, ("other content" + i).getBytes());
+                byte[] value = me.instance(r).get();
+                if (!Arrays.equals(value, ("my content" + i).getBytes())) {
+                    assertArrayEquals(value, ("other content" + i).getBytes(), "fail at " + i + ".content:" +
+                            new String(value));
+                }
+            } catch (ExecutionException | InterruptedException e) {
                 fail(e);
             }
         });
@@ -126,7 +143,7 @@ class PaxosServerTest {
                 fail(e);
             }
             assertEquals(round.get(), server.getPaxos().done());
-            assertEquals(round.get() + 1, server.getPaxos().min());
+            assertEquals(round.get(), server.getPaxos().min());
         });
     }
 }

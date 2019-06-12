@@ -86,7 +86,7 @@ class PaxosTest {
         paxos.instance(5).get(1, TimeUnit.SECONDS);
         paxos.done(5);
         paxos.forget(5);
-        assertEquals(6, paxos.min());
+        assertEquals(5, paxos.min());
         assertEquals(5, paxos.done());
     }
 

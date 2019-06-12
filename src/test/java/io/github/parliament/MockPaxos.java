@@ -14,10 +14,9 @@ class MockPaxos implements Coordinator {
     public void coordinate(int id, byte[] content) {
         states.put(id, content);
         max = Math.max(id, max);
-        if (waiting.containsKey(id)) {
-            waiting.get(id).complete(content);
-            waiting.remove(id);
-        }
+
+        waiting.putIfAbsent(id, new CompletableFuture<>());
+        waiting.get(id).complete(content);
     }
 
     @Override
@@ -67,6 +66,11 @@ class MockPaxos implements Coordinator {
     @Override
     public byte[] get(int round) {
         return new byte[0];
+    }
+
+    @Override
+    public void learn(int round) {
+
     }
 
     void clear() {

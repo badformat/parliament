@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.util.Optional;
 
 class SyncProxyAcceptor implements Acceptor {
     @Getter(AccessLevel.PACKAGE)
@@ -120,5 +121,19 @@ class SyncProxyAcceptor implements Acceptor {
             }
             return codec.decodeDone(channel);
         }
+    }
+
+    public byte[] pull(int round) throws IOException {
+        synchronized (channel) {
+            ByteBuffer src = codec.encodePull(round);
+            while (src.hasRemaining()) {
+                channel.write(src);
+            }
+            Optional<byte[]> opt = codec.decodePull(round, channel);
+            if (opt.isPresent()) {
+                return opt.get();
+            }
+        }
+        return null;
     }
 }

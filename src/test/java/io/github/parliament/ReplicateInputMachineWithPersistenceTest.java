@@ -15,23 +15,23 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-class ReplicateStateMachineWithPersistenceTest {
+class ReplicateInputMachineWithPersistenceTest {
     private static ReplicateStateMachine rsm;
-    private static EventProcessor processor = mock(EventProcessor.class);
+    private static StateTransfer processor = mock(StateTransfer.class);
     private static ExecutorService executor = Executors.newFixedThreadPool(10);
     private static Path tempDir;
 
     @BeforeAll
-    static void beforeAll() throws IOException {
+    static void beforeAll() throws Exception {
         tempDir = Files.createTempDirectory("test");
         rsm = create("1");
         rsm.start(processor, executor);
     }
 
-    static private ReplicateStateMachine create(String dir) throws IOException {
+    static private ReplicateStateMachine create(String dir) throws Exception {
         PagePersistence persistence = PagePersistence.builder().path(tempDir.resolve(dir)).build();
         Sequence<Integer> sequence = new IntegerSequence();
         MockPaxos coordinator = new MockPaxos();
@@ -41,12 +41,8 @@ class ReplicateStateMachineWithPersistenceTest {
                 .coordinator(coordinator)
                 .sequence(sequence)
                 .build();
-        ret.setEventProcessor(processor);
-        doAnswer((ctx) -> {
-            State state = (State) ctx.getArguments()[0];
-            state.setProcessed(true);
-            return null;
-        }).when(processor).process(any());
+        ret.setStateTransfer(processor);
+        when(processor.transform(any())).thenReturn(mock(Output.class));
         return ret;
     }
 
@@ -65,11 +61,11 @@ class ReplicateStateMachineWithPersistenceTest {
                 .map((i) -> {
                     try {
                         byte[] c = (i + "content").getBytes();
-                        State s = rsm.state(c);
+                        Input s = rsm.newState(c);
                         assertTrue(rsm.done() < s.getId(), "done:" + rsm.done() + ",id:" + s.getId());
-                        State r = rsm.submit(s).get(10, TimeUnit.SECONDS);
+                        Output o = rsm.submit(s).get(10, TimeUnit.SECONDS);
                         assertArrayEquals(c, s.getContent());
-                        assertTrue(rsm.done() >= r.getId() - 1, "done:" + rsm.done() + ",id:" + s.getId());
+                        assertTrue(rsm.done() >= o.getId() - 1, "done:" + rsm.done() + ",id:" + s.getId());
                     } catch (IOException | InterruptedException | ExecutionException | TimeoutException e) {
                         fail(e);
                     }
@@ -78,12 +74,12 @@ class ReplicateStateMachineWithPersistenceTest {
     }
 
     @Test
-    void redoLog() throws IOException {
+    void redoLog() throws Exception {
         ReplicateStateMachine rsm1 = create("2");
         rsm1.getPersistence().put(ReplicateStateMachine.RSM_DONE_REDO,
                 ByteBuffer.allocate(4).putInt(88).array());
         rsm1.start(processor, executor);
         assertEquals(88, rsm1.done());
-        assertEquals(Integer.valueOf(89), rsm1.state("c".getBytes()).getId());
+        assertEquals(Integer.valueOf(89), rsm1.newState("c".getBytes()).getId());
     }
 }

@@ -8,9 +8,7 @@ import io.github.parliament.paxos.acceptor.Prepare;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
@@ -20,7 +18,7 @@ import java.util.function.Consumer;
 public class Proposer {
     private static final Logger logger = LoggerFactory.getLogger(Proposer.class);
     private List<? extends Acceptor> acceptors;
-    private int majority = Integer.MAX_VALUE;
+    private int quorum = Integer.MAX_VALUE;
     private Sequence<String> sequence;
     private boolean decided = false;
     private String n;
@@ -29,7 +27,7 @@ public class Proposer {
     public Proposer(List<? extends Acceptor> acceptors, Sequence<String> sequence, final byte[] proposal) {
         Preconditions.checkArgument(proposal != null);
         this.acceptors = acceptors;
-        this.majority = calcMajority(acceptors.size());
+        this.quorum = quorum(acceptors.size());
         this.sequence = sequence;
         this.agreement = proposal;
     }
@@ -38,73 +36,78 @@ public class Proposer {
         try {
             ThreadLocalRandom random = ThreadLocalRandom.current();
 
-            int retried = 0;
+            int retryCount = 0;
             while (!decided) {
                 n = sequence.next();
                 if (prepare()) {
                     decided = accept();
+                    if (!decided) {
+                        logger.debug("accept rejected by quorum.");
+                    }
+                } else {
+                    logger.debug("prepare rejected by quorum.");
                 }
                 if (!decided) {
-                    retried++;
+                    retryCount++;
                     try {
-                        Thread.sleep(Math.abs(random.nextInt()) % 100);
+                        Thread.sleep(Math.abs(random.nextInt()) % 300);
                     } catch (InterruptedException e) {
-                        logger.error("failed in propose.", e);
+                        logger.error("Failed in propose.", e);
                         return null;
                     }
-                    if (retried > 10) {
-                        logger.error("failed in propose.Retried {} times.", 10);
+                    if (retryCount > 3) {
+                        logger.error("Failed in propose.Retried {} times.", 3);
                         throw new IllegalStateException();
                     }
                 }
             }
 
-            int decideCnt = 0;
             Preconditions.checkNotNull(agreement);
-            for (Acceptor acceptor : acceptors) {
+
+            Optional<Integer> success = acceptors.stream().parallel().map(acceptor -> {
                 try {
                     acceptor.decide(agreement);
-                    decideCnt++;
+                    return 1;
                 } catch (Exception e) {
-                    logger.error("failed in propose.", e);
+                    logger.error("failed in decide().", e);
+                    return 0;
                 }
-            }
+            }).reduce((i, j) -> j + j);
 
-            if (decideCnt >= getMajority()) {
+            if (success.orElse(0) >= getQuorum()) {
                 return agreement;
             } else {
-                logger.error("failed in propose. decided < majority.");
+                logger.error("failed in propose. decided < quorum.");
                 decided = false;
-                throw new IllegalStateException("decided < majority.");
+                throw new IllegalStateException("decided < quorum.");
             }
         } finally {
             callback.accept(decided);
         }
     }
 
-    public boolean isDecided() {
+    boolean isDecided() {
         return decided;
     }
 
     boolean prepare() {
-        List<Prepare> prepares = new ArrayList<>();
-        int failedPeers = 0;
+        List<Prepare> prepares = Collections.synchronizedList(new ArrayList<>());
 
-        for (Acceptor acceptor : acceptors) {
-            Prepare prepare = null;
+        Optional<Integer> success = acceptors.stream().parallel().map(acceptor -> {
             try {
-                prepare = acceptor.prepare(n);
+                Prepare prepare = acceptor.prepare(n);
+                checkPrepare(acceptor, prepare);
+                prepares.add(prepare);
+                return 1;
             } catch (Exception e) {
-                failedPeers++;
                 logger.warn("failed in propose.", e);
-                continue;
+                return 0;
             }
-            if (failedPeers >= getMajority()) {
-                logger.error("prepared < majority.");
-                throw new IllegalStateException("prepared < majority");
-            }
-            checkPrepare(acceptor, prepare);
-            prepares.add(prepare);
+        }).reduce((p, n) -> p + n);
+
+        if (success.orElse(0) < getQuorum()) {
+            logger.error("success prepare() < quorum. ");
+            throw new IllegalStateException("success prepare() < quorum");
         }
 
         int ok = 0;
@@ -127,7 +130,7 @@ public class Proposer {
             }
         }
 
-        return ok >= majority;
+        return ok >= quorum;
     }
 
     private void checkPrepare(Acceptor acceptor, Prepare prepare) {
@@ -138,31 +141,20 @@ public class Proposer {
     }
 
     boolean accept() {
-        int ok = 0;
-        int failedPeers = 0;
         Preconditions.checkNotNull(agreement);
 
-        for (Acceptor acceptor : acceptors) {
-            Accept accept = null;
+        Optional<Integer> success = acceptors.stream().parallel().map(acceptor -> {
             try {
-                accept = acceptor.accept(n, agreement);
+                Accept accept = acceptor.accept(n, agreement);
+                checkAccept(acceptor, accept);
+                return accept.isOk() ? 1 : 0;
             } catch (Exception e) {
-                failedPeers++;
                 logger.info("failed in accept", e);
-                continue;
+                return 0;
             }
+        }).reduce((n, p) -> n + p);
 
-            if (failedPeers >= getMajority()) {
-                logger.info("failed in accept. accepted < majority");
-                throw new IllegalStateException("accepted < majority");
-            }
-
-            checkAccept(acceptor, accept);
-            if (accept.isOk()) {
-                ok++;
-            }
-        }
-        return ok >= majority;
+        return success.orElse(0) >= getQuorum();
     }
 
     private void checkAccept(Acceptor acceptor, Accept accept) {
@@ -172,11 +164,11 @@ public class Proposer {
         }
     }
 
-    int getMajority() {
-        return this.majority;
+    int getQuorum() {
+        return this.quorum;
     }
 
-    int calcMajority(int size) {
+    int quorum(int size) {
         return (int) Math.ceil((size + 1) / 2.0d);
     }
 

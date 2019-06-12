@@ -13,4 +13,6 @@ public interface PeerAcceptors {
     int done() throws IOException;
 
     int max() throws IOException;
+
+    byte[] learn(int round);
 }
