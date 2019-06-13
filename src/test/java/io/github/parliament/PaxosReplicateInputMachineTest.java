@@ -2,8 +2,11 @@ package io.github.parliament;
 
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
+import io.github.parliament.paxos.client.ConnectionPool;
+import io.github.parliament.paxos.client.InetLeaner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.server.PaxosServer;
+import lombok.NonNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.RepeatedTest;
@@ -40,14 +43,18 @@ class PaxosReplicateInputMachineTest {
                 .map(i -> new InetSocketAddress("127.0.0.1", i))
                 .collect(Collectors.toList());
 
+        ConnectionPool pool = ConnectionPool.create(1000);
+
         addresses.stream().forEach(me -> {
             try {
                 ArrayList<InetSocketAddress> peers = new ArrayList<>(addresses);
                 peers.remove(me);
-                InetPeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(200).build();
+                InetPeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).connectionPool(pool).build();
                 ExecutorService executorService = Executors.newCachedThreadPool();
+                @NonNull InetLeaner learner = InetLeaner.create(pool, peers);
                 Paxos paxos = Paxos.builder()
                         .peerAcceptors(acceptors)
+                        .learner(learner)
                         .executorService(executorService)
                         .persistence(new MockPersistence())
                         .sequence(new TimestampSequence())

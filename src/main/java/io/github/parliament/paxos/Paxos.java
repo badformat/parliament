@@ -10,6 +10,7 @@ import io.github.parliament.Coordinator;
 import io.github.parliament.Persistence;
 import io.github.parliament.Sequence;
 import io.github.parliament.paxos.acceptor.*;
+import io.github.parliament.paxos.client.InetLeaner;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import io.github.parliament.paxos.proposer.Proposer;
 import lombok.AccessLevel;
@@ -46,6 +47,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
     private Sequence<String> sequence;
     private Persistence persistence;
     private PeerAcceptors peerAcceptors;
+    private InetLeaner learner;
     private volatile int max = -1;
     private volatile int min = -1;
     private volatile int done = -1;
@@ -54,11 +56,13 @@ public class Paxos implements Coordinator, LocalAcceptors {
     private Paxos(@NonNull ExecutorService executorService,
                   @NonNull Sequence<String> sequence,
                   @NonNull Persistence persistence,
-                  @NonNull PeerAcceptors peerAcceptors) throws IOException {
+                  @NonNull PeerAcceptors peerAcceptors,
+                  @NonNull InetLeaner learner) throws IOException {
         this.executorService = executorService;
         this.sequence = sequence;
         this.persistence = persistence;
         this.peerAcceptors = peerAcceptors;
+        this.learner = learner;
 
         byte[] bytes = persistence.get("min".getBytes());
         if (bytes != null) {
@@ -125,7 +129,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
     @Override
     public void learn(int round) throws IOException {
-        byte[] content = peerAcceptors.learn(round);
+        byte[] content = learner.instance(round).orElse(null);
         if (content == null) {
             return;
         }
@@ -160,7 +164,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
             if (before > done) {
                 return;
             }
-            int other = peerAcceptors.done();
+            int other = learner.done();
             int cursor = Math.min(before, other);
             if (cursor < min) {
                 logger.warn("forgotten others not finished states.It's impossible.A Bug?");

@@ -4,6 +4,7 @@ import io.github.parliament.MockPersistence;
 import io.github.parliament.Persistence;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.LocalAcceptor;
+import io.github.parliament.paxos.client.InetLeaner;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ class PaxosTest {
     private byte[] value = "content".getBytes();
     private Persistence persistence = new MockPersistence();
     private PeerAcceptors peerAcceptors;
+    private InetLeaner leaner;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -36,10 +38,13 @@ class PaxosTest {
         peerAcceptors = mock(PeerAcceptors.class);
         when(peerAcceptors.create(anyInt())).thenAnswer((ctx) -> acceptors);
         doNothing().when(peerAcceptors).release(anyInt());
+
+        leaner = mock(InetLeaner.class);
         paxos = Paxos.builder()
                 .executorService(Executors.newFixedThreadPool(10))
                 .sequence(new TimestampSequence())
                 .peerAcceptors(peerAcceptors)
+                .learner(leaner)
                 .persistence(persistence)
                 .build();
     }
@@ -81,7 +86,7 @@ class PaxosTest {
 
     @Test
     void forget() throws IOException, ExecutionException, TimeoutException, InterruptedException {
-        when(peerAcceptors.done()).thenReturn(5);
+        when(leaner.done()).thenReturn(5);
         paxos.coordinate(5, value);
         paxos.instance(5).get(1, TimeUnit.SECONDS);
         paxos.done(5);

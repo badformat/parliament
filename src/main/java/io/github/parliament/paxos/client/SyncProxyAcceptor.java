@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import java.util.Optional;
 
 class SyncProxyAcceptor implements Acceptor {
     @Getter(AccessLevel.PACKAGE)
@@ -61,25 +60,6 @@ class SyncProxyAcceptor implements Acceptor {
         }
     }
 
-    int max() throws IOException {
-        synchronized (channel) {
-            ByteBuffer src = codec.encodeMax();
-            while (src.hasRemaining()) {
-                channel.write(src);
-            }
-            return codec.decodeMax(channel);
-        }
-    }
-
-    int done() throws IOException {
-        try {
-            return delegateDone();
-        } catch (IOException e) {
-            ioFailed = true;
-            throw e;
-        }
-    }
-
     Prepare delegatePrepare(int round, String n) throws IOException {
         synchronized (channel) {
             ByteBuffer request = codec.encodePrepare(round, n);
@@ -111,29 +91,5 @@ class SyncProxyAcceptor implements Acceptor {
             }
             codec.decodeDecide(channel);
         }
-    }
-
-    int delegateDone() throws IOException {
-        synchronized (channel) {
-            ByteBuffer src = codec.encodeDone();
-            while (src.hasRemaining()) {
-                channel.write(src);
-            }
-            return codec.decodeDone(channel);
-        }
-    }
-
-    public byte[] pull(int round) throws IOException {
-        synchronized (channel) {
-            ByteBuffer src = codec.encodePull(round);
-            while (src.hasRemaining()) {
-                channel.write(src);
-            }
-            Optional<byte[]> opt = codec.decodePull(round, channel);
-            if (opt.isPresent()) {
-                return opt.get();
-            }
-        }
-        return null;
     }
 }

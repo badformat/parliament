@@ -55,7 +55,7 @@ public class ClientCodec {
         return RespArray.with(cmd).toByteBuffer();
     }
 
-    public ByteBuffer encodePull(int round) {
+    public ByteBuffer encodeInstance(int round) {
         RespSimpleString cmd = RespSimpleString.withUTF8("pull");
         RespInteger r = RespInteger.with(round);
         return RespArray.with(cmd, r).toByteBuffer();
@@ -117,7 +117,7 @@ public class ClientCodec {
         return respParser.getAsInteger().getN();
     }
 
-    public Optional<byte[]> decodePull(int round, SocketChannel remote) throws IOException {
+    public Optional<byte[]> decodeInstance(int round, SocketChannel remote) throws IOException {
         RespParser respParser = RespParser.create(remote);
         RespArray array = respParser.getAsArray();
         if (array.size() == 0) {

@@ -3,6 +3,8 @@ package io.github.parliament.paxos.server;
 import io.github.parliament.MockPersistence;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
+import io.github.parliament.paxos.client.ConnectionPool;
+import io.github.parliament.paxos.client.InetLeaner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,15 +37,18 @@ class PaxosServerTest {
         addresses = Stream.iterate(9000, (i) -> i + 1).limit(4)
                 .map(i -> new InetSocketAddress("127.0.0.1", i))
                 .collect(Collectors.toList());
+        ConnectionPool pool = ConnectionPool.create(1000);
 
         servers = addresses.stream().map(address -> {
             try {
                 ArrayList<InetSocketAddress> peers = new ArrayList<>(addresses);
                 peers.remove(address);
-                InetPeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(300).build();
+                InetPeerAcceptors acceptors = InetPeerAcceptors.builder().connectionPool(pool).peers(peers).build();
                 ExecutorService executorService = Executors.newCachedThreadPool();
+                InetLeaner leaner = InetLeaner.create(pool, peers);
                 Paxos paxos = Paxos.builder()
                         .peerAcceptors(acceptors)
+                        .learner(leaner)
                         .executorService(executorService)
                         .persistence(new MockPersistence())
                         .sequence(new TimestampSequence())

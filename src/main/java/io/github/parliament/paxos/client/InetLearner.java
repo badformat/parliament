@@ -68,11 +68,11 @@ public class InetLearner {
 
     private boolean sync(SocketChannel remote, int round) {
         try {
-            ByteBuffer cmd = codec.encodePull(round);
+            ByteBuffer cmd = codec.encodeInstance(round);
             while (cmd.hasRemaining()) {
                 remote.write(cmd);
             }
-            Optional<byte[]> ret = codec.decodePull(round, remote);
+            Optional<byte[]> ret = codec.decodeInstance(round, remote);
             if (!ret.isPresent()) {
                 return false;
             } else {

@@ -4,6 +4,8 @@ import io.github.parliament.kv.KeyValueEngine;
 import io.github.parliament.kv.KeyValueServer;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
+import io.github.parliament.paxos.client.ConnectionPool;
+import io.github.parliament.paxos.client.InetLeaner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import io.github.parliament.paxos.server.PaxosServer;
@@ -29,18 +31,22 @@ public class Application {
         prop = System.getProperty("me");
         InetSocketAddress me = getInetSocketAddress(prop);
 
+        peers.remove(me);
+
         prop = System.getProperty("dir");
         String dir = prop;
 
         prop = System.getProperty("kv");
         InetSocketAddress kv = getInetSocketAddress(prop);
 
-
         @NonNull ExecutorService executorService = Executors.newFixedThreadPool(200);
-        @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).pmc(20).build();
+        @NonNull ConnectionPool connectionPool = ConnectionPool.create(500);
+        @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).connectionPool(connectionPool).build();
+        @NonNull InetLeaner leaner = InetLeaner.create(connectionPool, peers);
         @NonNull Paxos paxos = Paxos.builder()
                 .executorService(executorService)
                 .peerAcceptors(acceptors)
+                .learner(leaner)
                 .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("paxos")).build())
                 .sequence(new TimestampSequence())
                 .build();

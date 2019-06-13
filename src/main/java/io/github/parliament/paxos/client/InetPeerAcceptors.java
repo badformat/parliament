@@ -4,9 +4,7 @@ import com.google.common.base.Preconditions;
 import io.github.parliament.paxos.acceptor.Accept;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.Prepare;
-import lombok.AccessLevel;
 import lombok.Builder;
-import lombok.Getter;
 import lombok.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,31 +12,20 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InetPeerAcceptors implements PeerAcceptors {
     private static final Logger logger = LoggerFactory.getLogger(InetSocketAddress.class);
-    private List<InetSocketAddress> peers;
     private final ConcurrentHashMap<Integer, List<SyncProxyAcceptor>> acceptors = new ConcurrentHashMap<>();
-    @Getter(AccessLevel.PACKAGE)
-    private final ConcurrentHashMap<InetSocketAddress, ArrayDeque<SocketChannel>> idleChannels
-            = new ConcurrentHashMap<>();
-    @Getter(AccessLevel.PACKAGE)
-    private final ConcurrentHashMap<InetSocketAddress, ArrayDeque<SocketChannel>> busyChannels
-            = new ConcurrentHashMap<>();
-    private int pmc;
+    private final ConnectionPool connectionPool;
+    private final List<InetSocketAddress> peers;
 
     @Builder
-    private InetPeerAcceptors(@NonNull List<InetSocketAddress> peers, int pmc) {
+    private InetPeerAcceptors(@NonNull List<InetSocketAddress> peers, @NonNull ConnectionPool connectionPool) {
+        this.connectionPool = connectionPool;
         this.peers = peers;
-        if (pmc <= 0) {
-            this.pmc = 10;
-        } else {
-            this.pmc = pmc;
-        }
     }
 
     @Override
@@ -53,7 +40,7 @@ public class InetPeerAcceptors implements PeerAcceptors {
             for (InetSocketAddress address : peers) {
                 SocketChannel channel = null;
                 try {
-                    channel = acquireChannel(address);
+                    channel = connectionPool.acquireChannel(address);
                     SyncProxyAcceptor proxy = SyncProxyAcceptor.builder()
                             .remote(address)
                             .channel(channel)
@@ -93,89 +80,7 @@ public class InetPeerAcceptors implements PeerAcceptors {
             if (a.getChannel() != null) {
                 SocketChannel channel = a.getChannel();
                 InetSocketAddress address = a.getRemote();
-                releaseChannel(address, channel, a.isIoFailed());
-            }
-        }
-    }
-
-    @Override
-    public int done() throws IOException {
-        List<SyncProxyAcceptor> others = create0(-1);
-        int done = Integer.MAX_VALUE;
-        for (SyncProxyAcceptor other : others) {
-            int otherDone = other.done();
-            done = Math.min(otherDone, done);
-        }
-        return done;
-    }
-
-    @Override
-    public int max() throws IOException {
-        List<SyncProxyAcceptor> others = create0(-1);
-        int done = Integer.MIN_VALUE;
-        for (SyncProxyAcceptor other : others) {
-            done = Math.max(other.max(), done);
-        }
-        return done;
-    }
-
-    @Override
-    public byte[] learn(int round) {
-        List<SyncProxyAcceptor> others = create0(-1);
-        for (SyncProxyAcceptor other : others) {
-            byte[] agreement = null;
-            try {
-                agreement = other.pull(round);
-            } catch (IOException e) {
-                logger.error("IOException in learn round {}", round, e);
-                continue;
-            }
-            if (agreement != null) {
-                return agreement;
-            }
-        }
-        return null;
-    }
-
-    Object lock = new Object();
-
-    SocketChannel acquireChannel(InetSocketAddress address) throws IOException, NoConnectionInPool {
-        synchronized (lock) {
-            idleChannels.putIfAbsent(address, new ArrayDeque<>());
-            busyChannels.putIfAbsent(address, new ArrayDeque<>());
-
-            ArrayDeque<SocketChannel> idle = idleChannels.get(address);
-            ArrayDeque<SocketChannel> busy = busyChannels.get(address);
-
-            if (busy.size() >= pmc) {
-                throw new NoConnectionInPool(address);
-            } else {
-                SocketChannel candidate = idle.pollFirst();
-                if (candidate != null) {
-                    busy.add(candidate);
-                    return candidate;
-                }
-                SocketChannel chn = SocketChannel.open(address);
-                busy.add(chn);
-                return chn;
-            }
-        }
-    }
-
-    void releaseChannel(InetSocketAddress address, SocketChannel channel, boolean failed) {
-        synchronized (lock) {
-            if (channel == null) {
-                return;
-            }
-            busyChannels.get(address).remove(channel);
-            if (failed) {
-                try {
-                    channel.close();
-                } catch (IOException e) {
-                    logger.error("close channel failed.", e);
-                }
-            } else {
-                idleChannels.get(address).add(channel);
+                connectionPool.releaseChannel(address, channel, a.isIoFailed());
             }
         }
     }

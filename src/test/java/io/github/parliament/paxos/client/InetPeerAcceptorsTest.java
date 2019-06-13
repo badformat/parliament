@@ -16,10 +16,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InetPeerAcceptorsTest {
-    private InetPeerAcceptors factory;
+    private InetPeerAcceptors acceptors;
+    private ConnectionPool connectionPool;
     private ServerSocketChannel server;
     private Thread t;
-    private int pmc = 10;
+    private int poolSize = 10;
     private InetSocketAddress peer;
 
     @BeforeEach
@@ -27,9 +28,11 @@ class InetPeerAcceptorsTest {
         @NonNull List<InetSocketAddress> peers = new ArrayList<>();
         peer = new InetSocketAddress("127.0.0.1", 8098);
         peers.add(peer);
-        factory = InetPeerAcceptors.builder()
+        connectionPool = ConnectionPool.create(poolSize);
+
+        acceptors = InetPeerAcceptors.builder()
                 .peers(peers)
-                .pmc(10)
+                .connectionPool(connectionPool)
                 .build();
 
         server = ServerSocketChannel.open();
@@ -55,7 +58,7 @@ class InetPeerAcceptorsTest {
 
     @Test
     void create() {
-        List<? extends Acceptor> a = factory.create(1);
+        List<? extends Acceptor> a = acceptors.create(1);
         assertNotNull(a);
         assertEquals(1, a.size());
     }
@@ -64,30 +67,30 @@ class InetPeerAcceptorsTest {
     void tooManyConnection() {
         ArrayList<SocketChannel> channels = new ArrayList<>();
         assertThrows(NoConnectionInPool.class, () -> {
-            for (int i = 0; i <= pmc; i++) {
-                channels.add(factory.acquireChannel(peer));
+            for (int i = 0; i <= connectionPool.getPoolSize(); i++) {
+                channels.add(connectionPool.acquireChannel(peer));
             }
         });
 
         for (SocketChannel channel : channels) {
-            factory.releaseChannel(peer, channel, false);
+            connectionPool.releaseChannel(peer, channel, false);
         }
 
-        assertTrue(factory.getBusyChannels().get(peer).isEmpty());
-        assertEquals(pmc, factory.getIdleChannels().get(peer).size());
+        assertTrue(connectionPool.getActives().get(peer).isEmpty());
+        assertEquals(poolSize, connectionPool.getIdles().get(peer).size());
 
     }
 
     @Test
     void createSameRound() {
-        List<? extends Acceptor> a = factory.create(1);
-        assertThrows(IllegalStateException.class, () -> factory.create(1));
+        List<? extends Acceptor> a = acceptors.create(1);
+        assertThrows(IllegalStateException.class, () -> acceptors.create(1));
 
     }
 
     @Test
     void release() {
-        List<? extends Acceptor> a = factory.create(1);
-        factory.release(1);
+        List<? extends Acceptor> a = acceptors.create(1);
+        acceptors.release(1);
     }
 }

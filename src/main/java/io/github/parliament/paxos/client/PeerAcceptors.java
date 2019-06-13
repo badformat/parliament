@@ -9,10 +9,4 @@ public interface PeerAcceptors {
     List<? extends Acceptor> create(int round);
 
     void release(int round);
-
-    int done() throws IOException;
-
-    int max() throws IOException;
-
-    byte[] learn(int round);
 }
