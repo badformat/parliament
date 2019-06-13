@@ -87,7 +87,7 @@ public class KeyValueEngine implements StateTransfer {
                 }
             });
         } catch (UnknownKeyValueCommand e) {
-            return CompletableFuture.completedFuture(RespError.withUTF8("Unknown Command:"));
+            return CompletableFuture.completedFuture(RespError.withUTF8("Unknown Command."));
         }
 
 
