@@ -64,28 +64,33 @@ public class KeyValueEngine implements StateTransfer {
         rsm.start(this, executorService);
     }
 
-    public Future<RespData> submit(byte[] bytes) throws UnknownKeyValueCommand, IOException, ExecutionException {
-        RespDecoder decoder = new RespDecoder();
-        decoder.decode(bytes);
-        RespArray request = decoder.get();
+    public Future<RespData> submit(byte[] bytes) throws IOException, ExecutionException {
+        try {
+            RespDecoder decoder = new RespDecoder();
+            decoder.decode(bytes);
+            RespArray request = decoder.get();
 
-        checkSubmitted(request);
+            checkSubmitted(request);
 
-        Input input = rsm.newState(bytes);
-        CompletableFuture<Output> future = rsm.submit(input);
-
-        return future.thenApply((output) -> {
-            try {
-                if (!Arrays.equals(input.getUuid(), output.getUuid())) {
-                    return RespError.withUTF8("共识冲突");
+            Input input = rsm.newState(bytes);
+            CompletableFuture<Output> future = rsm.submit(input);
+            return future.thenApply((output) -> {
+                try {
+                    if (!Arrays.equals(input.getUuid(), output.getUuid())) {
+                        return RespError.withUTF8("共识冲突");
+                    }
+                    return RespDecoder.create().decode(output.getContent()).get();
+                } catch (Exception e) {
+                    logger.error("get submit result failed:", e);
+                    return RespError.withUTF8("get submit result failed:" + e.getClass().getName()
+                            + ",message:" + e.getMessage());
                 }
-                return RespDecoder.create().decode(output.getContent()).get();
-            } catch (Exception e) {
-                logger.error("get submit result failed:", e);
-                return RespError.withUTF8("get submit result failed:" + e.getClass().getName()
-                        + ",message:" + e.getMessage());
-            }
-        });
+            });
+        } catch (UnknownKeyValueCommand e) {
+            return CompletableFuture.completedFuture(RespError.withUTF8("Unknown Command:"));
+        }
+
+
     }
 
     private void checkSubmitted(RespArray request) throws UnknownKeyValueCommand {
