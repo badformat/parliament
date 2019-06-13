@@ -31,13 +31,13 @@ class PaxosServerTest {
     private static Paxos other;
     private static byte[] content = "content".getBytes();
     private static volatile AtomicInteger round = new AtomicInteger();
+    private static ConnectionPool pool = ConnectionPool.create(1000);
 
     @BeforeAll
     static void beforeAll() throws IOException {
         addresses = Stream.iterate(9000, (i) -> i + 1).limit(4)
                 .map(i -> new InetSocketAddress("127.0.0.1", i))
                 .collect(Collectors.toList());
-        ConnectionPool pool = ConnectionPool.create(1000);
 
         servers = addresses.stream().map(address -> {
             try {
@@ -74,6 +74,7 @@ class PaxosServerTest {
 
     @AfterAll
     static void afterAll() throws IOException {
+        pool.nuke();
         for (PaxosServer server : servers) {
             server.shutdown();
         }

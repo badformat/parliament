@@ -26,6 +26,24 @@ public class ConnectionPool {
         return new ConnectionPool(poolSize);
     }
 
+    public synchronized void nuke() {
+        actives.values().stream().flatMap(deque -> deque.stream()).forEach(channel -> {
+            try {
+                channel.close();
+            } catch (IOException e) {
+                logger.warn("close channel failed", e);
+            }
+        });
+
+        idles.values().stream().flatMap(deque -> deque.stream()).forEach(channel -> {
+            try {
+                channel.close();
+            } catch (IOException e) {
+                logger.warn("close channel failed", e);
+            }
+        });
+    }
+
     private ConnectionPool(int poolSize) {
         if (poolSize <= 0) {
             this.poolSize = 10;

@@ -36,14 +36,13 @@ class PaxosReplicateInputMachineTest {
     private static StateTransfer transfer2;
     private static int concurrentLevel = 20;
     private static int peersNo = 6;
+    private static ConnectionPool pool = ConnectionPool.create(1000);
 
     @BeforeAll
     static void beforeAll() throws Exception {
         addresses = Stream.iterate(9000, (i) -> i + 1).limit(peersNo)
                 .map(i -> new InetSocketAddress("127.0.0.1", i))
                 .collect(Collectors.toList());
-
-        ConnectionPool pool = ConnectionPool.create(1000);
 
         addresses.stream().forEach(me -> {
             try {
@@ -93,6 +92,7 @@ class PaxosReplicateInputMachineTest {
 
     @AfterAll
     static void afterAll() throws IOException {
+        pool.nuke();
         for (PaxosServer server : paxosServers) {
             server.shutdown();
         }
@@ -176,7 +176,7 @@ class PaxosReplicateInputMachineTest {
         myOutputs.stream().parallel().forEach(f -> {
             try {
                 Output output1 = f.get(1, TimeUnit.SECONDS);
-                Output output2 = other.getTransforms().get(output1.getId()).get(1, TimeUnit.SECONDS);
+                Output output2 = other.getTransforms().get(output1.getId()).get(3, TimeUnit.SECONDS);
                 assertEquals(output1.getId(), output2.getId());
                 assertEquals(new String(output1.getContent()), new String(output2.getContent()));
                 assertArrayEquals(output1.getUuid(), output2.getUuid());

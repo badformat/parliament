@@ -52,6 +52,7 @@ class InetPeerAcceptorsTest {
 
     @AfterEach
     void tearDown() throws IOException {
+        connectionPool.nuke();
         server.close();
         t.interrupt();
     }
