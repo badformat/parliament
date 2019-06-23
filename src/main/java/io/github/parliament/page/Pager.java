@@ -39,7 +39,7 @@ public class Pager {
         }
     }
 
-    public void insert(byte[] key, byte[] value) throws IOException, DuplicateKeyException {
+    public synchronized void insert(byte[] key, byte[] value) throws IOException, DuplicateKeyException {
         Preconditions.checkState(key.length <= Short.MAX_VALUE, "key is too long.");
         Preconditions.checkState(value.length <= Short.MAX_VALUE, "value is too long.");
 
@@ -49,17 +49,17 @@ public class Pager {
         sync(page);
     }
 
-    public boolean containsKey(byte[] key) throws IOException {
+    public synchronized boolean containsKey(byte[] key) throws IOException {
         Page page = page(0);
         return page.containsKey(key);
     }
 
-    public byte[] get(byte[] key) throws IOException {
+    public synchronized byte[] get(byte[] key) throws IOException {
         Page page = page(0);
         return page.get(key);
     }
 
-    public byte[] get(String key) throws IOException {
+    public synchronized byte[] get(String key) throws IOException {
         return get(key.getBytes());
     }
 

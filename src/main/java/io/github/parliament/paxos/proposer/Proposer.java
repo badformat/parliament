@@ -55,8 +55,8 @@ public class Proposer {
                         logger.error("Failed in propose.", e);
                         return null;
                     }
-                    if (retryCount > 3) {
-                        logger.error("Failed in propose.Retried {} times.", 3);
+                    if (retryCount >= 4) {
+                        logger.error("Failed in propose.Retried {} times.", 4);
                         throw new IllegalStateException();
                     }
                 }
