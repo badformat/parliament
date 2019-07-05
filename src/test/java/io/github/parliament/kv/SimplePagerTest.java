@@ -8,7 +8,7 @@ import java.nio.file.Paths;
 import java.util.Comparator;
 
 import io.github.parliament.DuplicateKeyException;
-import io.github.parliament.page.Pager;
+import io.github.parliament.page.SimplePager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,16 +17,16 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class PagerTest {
-    private static Pager pager;
+class SimplePagerTest {
+    private static SimplePager pager;
 
     @BeforeEach
     void beforeEach() throws IOException {
         pager = create();
     }
 
-    private Pager create() throws IOException {
-        return Pager.builder().path("./test").build();
+    private SimplePager create() throws IOException {
+        return SimplePager.builder().path("./test").build();
     }
 
     @AfterEach
@@ -81,7 +81,7 @@ class PagerTest {
     void load() throws IOException, DuplicateKeyException {
         pager.insert(key(0), value(0));
 
-        Pager pager2 = create();
+        SimplePager pager2 = create();
 
         assertArrayEquals(value(0), pager2.get(key(0)));
     }

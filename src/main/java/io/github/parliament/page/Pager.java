@@ -1,109 +1,40 @@
 package io.github.parliament.page;
 
-import com.google.common.base.Preconditions;
-import io.github.parliament.DuplicateKeyException;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.NonNull;
-
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 从disk一次读取大块数据（page），减少io请求。
- *
- * @author zy
- */
-@EqualsAndHashCode
 public class Pager {
-    private static final int K = 1024;
-    private Path space;
-    private int pageSize = 64 * K;
-    private ConcurrentHashMap<Integer, Page> pages = new ConcurrentHashMap<>();
+    private Path path;
+    private WriteAheadLog wal;
 
-    @Builder
-    private Pager(@NonNull String path, Integer pageSize) throws IOException {
-        this.space = Paths.get(path);
-        if (pageSize != null) {
-            this.pageSize = pageSize;
+    public Pager(String dir) {
+        path = Paths.get(dir);
+        wal = new WriteAheadLog(dir);
+    }
+
+    public void init() throws IOException {
+        if (Files.exists(path.resolve("page_seq"))) {
+            return;
         }
-
-        if (!Files.exists(space)) {
-            Files.createDirectories(space);
-        }
+        Files.createFile(path.resolve("page_seq"));
     }
 
-    public synchronized void insert(byte[] key, byte[] value) throws IOException, DuplicateKeyException {
-        Preconditions.checkState(key.length <= Short.MAX_VALUE, "key is too long.");
-        Preconditions.checkState(value.length <= Short.MAX_VALUE, "value is too long.");
-
-        Page page = page(0);
-
-        page.insert(key, value);
-        sync(page);
-    }
-
-    public synchronized boolean containsKey(byte[] key) throws IOException {
-        Page page = page(0);
-        return page.containsKey(key);
-    }
-
-    public synchronized byte[] get(byte[] key) throws IOException {
-        Page page = page(0);
-        return page.get(key);
-    }
-
-    public synchronized byte[] get(String key) throws IOException {
-        return get(key.getBytes());
-    }
-
-    public boolean remove(byte[] key) throws IOException {
-        Page page = page(0);
-        if (page.remove(key)) {
-            sync(page);
-            return true;
-        }
-        return false;
-    }
-
-    public byte[] range(byte[] begin, byte[] end, int limit) {
+    public Page page(int pageNo) {
         return null;
     }
 
-    private Page page(int i) throws IOException {
-        if (pages.containsKey(i)) {
-            return pages.get(i);
-        }
+    Page allocate() {
+        int pageNo = seq();
+        try {
+            return null;
+        } finally {
 
-        Path heap = space.resolve("heap" + i);
-        if (!Files.exists(heap)) {
-            Files.createFile(heap);
-        }
-
-        try (SeekableByteChannel chn = Files.newByteChannel(heap, StandardOpenOption.READ)) {
-            ByteBuffer dst = ByteBuffer.allocate(pageSize);
-            int read = 0;
-            do {
-                read = chn.read(dst);
-            } while (read != -1 && read != 0);
-
-            dst.flip();
-            Page page = new Page(dst, pageSize);
-            pages.put(0, page);
-            return page;
         }
     }
 
-    public void sync(Page page) throws IOException {
-        Path heap = space.resolve("heap0");
-        try (SeekableByteChannel chn = Files.newByteChannel(heap, StandardOpenOption.WRITE)) {
-            page.write(chn);
-        }
+    private int seq() {
+        return 0;
     }
 }

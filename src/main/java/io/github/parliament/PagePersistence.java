@@ -1,6 +1,6 @@
 package io.github.parliament;
 
-import io.github.parliament.page.Pager;
+import io.github.parliament.page.SimplePager;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -8,11 +8,11 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 public class PagePersistence implements Persistence {
-    Pager pager;
+    SimplePager pager;
 
     @Builder
     private PagePersistence(@NonNull Path path) throws IOException {
-        pager = Pager.builder().path(path.toString()).build();
+        pager = SimplePager.builder().path(path.toString()).build();
     }
 
     @Override
