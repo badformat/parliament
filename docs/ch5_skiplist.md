@@ -111,21 +111,23 @@ next page no + next node key
 ## heap file
 4g file, 65536个64k
 
-x个page
+x个page,每个page大小为s字节，heap文件为h字节。
+x*8 + x*s = h
+x = Math.floor(h / (8+s))
+
 x*8 + x*64*1024 = 4*1024*1024*1024
 x*65544 = 4294967296
 x = 65528.00009764
 
 heap:
-    seq: 2byte
 	heads: head[x]
 	pages: page[x]
 
 head:
-	page no: 2 byte
-	page location: 4 byte
+	page no: 4 bytes
+	page location: 4 bytes
 
-| seq(2 byte) | page no (2 byte) | page location (4 byte) | ... | page | page |
+| page no (4 bytes) | page location (4 bytes) | ... | page | page |
 
 ## skip list in page
 level 1:
