@@ -16,7 +16,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 从disk一次读取大块数据（page），减少io请求。
+ * 从disk一次读取大块数据（allocate），减少io请求。
  *
  * @author zy
  */

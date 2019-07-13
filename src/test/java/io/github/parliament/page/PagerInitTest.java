@@ -32,18 +32,9 @@ class PagerInitTest {
     @Test
     void init() throws IOException {
         Pager.init(path, 4096, 1024);
-        Path heap = path.resolve("heap0");
-        byte[] bytes = Files.readAllBytes(heap);
-        assertEquals(bytes.length / 8, 4096 / (8 + 1024));
-
-        ByteBuffer buf = ByteBuffer.wrap(bytes);
-        while (buf.hasRemaining()) {
-            assertEquals(-1, buf.getInt());
-        }
-
         Path seq = path.resolve(Pager.PAGE_SEQ_FILENAME);
 
-        buf = ByteBuffer.wrap(Files.readAllBytes(seq));
+        ByteBuffer buf = ByteBuffer.wrap(Files.readAllBytes(seq));
         assertEquals(0, buf.getInt());
         
         Path metainf = path.resolve(Pager.METAINF_FILENAME);

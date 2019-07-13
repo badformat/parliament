@@ -17,6 +17,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -34,7 +35,7 @@ class PaxosReplicateInputMachineTest {
     private static ReplicateStateMachine other;
     private static StateTransfer transfer1;
     private static StateTransfer transfer2;
-    private static int concurrentLevel = 20;
+    private static int instanceNo = 20;
     private static int peersNo = 6;
     private static ConnectionPool pool = ConnectionPool.create(1000);
 
@@ -44,7 +45,7 @@ class PaxosReplicateInputMachineTest {
                 .map(i -> new InetSocketAddress("127.0.0.1", i))
                 .collect(Collectors.toList());
 
-        addresses.stream().forEach(me -> {
+        addresses.forEach(me -> {
             try {
                 ArrayList<InetSocketAddress> peers = new ArrayList<>(addresses);
                 peers.remove(me);
@@ -100,15 +101,20 @@ class PaxosReplicateInputMachineTest {
 
     @RepeatedTest(10)
     void concurrentSubmit() throws Exception {
-        Stream.iterate(1, i -> i + 1).limit(concurrentLevel).parallel().forEach(i -> {
+        Optional<Integer> failed = Stream.iterate(1, i -> i + 1).limit(instanceNo).parallel().map(i -> {
             Input input = me.newState(("content" + i).getBytes());
             try {
-                Output output = me.submit(input).get(1, TimeUnit.SECONDS);
+                Output output = me.submit(input).get(3, TimeUnit.SECONDS);
                 assertArrayEquals(output.getContent(), (("output of " + new String(input.getContent())).getBytes()));
+                return 0;
             } catch (ExecutionException | IOException | InterruptedException | TimeoutException e) {
-                fail(e);
+                return 1;
             }
-        });
+        }).reduce((i, j) -> i + j);
+
+        assertTrue(failed.isPresent());
+
+        assertTrue(failed.get() < instanceNo / 2);
         keepUp();
     }
 
@@ -117,30 +123,40 @@ class PaxosReplicateInputMachineTest {
         List<CompletableFuture<Output>> myOutputs = Collections.synchronizedList(new ArrayList<>());
         List<CompletableFuture<Output>> otherOutputs = Collections.synchronizedList(new ArrayList<>());
 
-        Stream.iterate(1, i -> i + 1).limit(concurrentLevel).forEach(i -> {
+        Optional<Integer> failed = Stream.iterate(1, i -> i + 1).limit(instanceNo).map(i -> {
             try {
                 myOutputs.add(me.submit(me.newState(("my content" + i).getBytes())));
                 otherOutputs.add(other.submit(other.newState(("other content" + i).getBytes())));
+                return 0;
             } catch (IOException | ExecutionException e) {
-                fail(e);
+                return 1;
             }
-        });
+        }).reduce((i, j) -> i + j);
 
-        myOutputs.stream().parallel().forEach(f -> {
+        assertTrue(failed.isPresent());
+
+        assertTrue(failed.get() < instanceNo / 2);
+
+        failed = myOutputs.stream().map(f -> {
             try {
-                Output output1 = f.get(1, TimeUnit.SECONDS);
-                Output output2 = other.getTransforms().get(output1.getId()).get(1, TimeUnit.SECONDS);
+                Output output1 = f.get(3, TimeUnit.SECONDS);
+                Output output2 = other.getTransforms().get(output1.getId()).get(3, TimeUnit.SECONDS);
                 assertEquals(output1, output2);
+                return 0;
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                fail(e);
+                return 1;
             }
-        });
+        }).reduce((i, j) -> i + j);
+
+        assertTrue(failed.isPresent());
+
+        assertTrue(failed.get() < instanceNo / 2);
         keepUp();
     }
 
     @RepeatedTest(10)
     void submitByTurns() throws Exception {
-        Stream.iterate(1, i -> i + 1).limit(concurrentLevel).parallel().forEach(i -> {
+        Stream.iterate(1, i -> i + 1).limit(instanceNo).parallel().forEach(i -> {
             Input input = me.newState(("my content" + i).getBytes());
             try {
                 me.submit(input).get(1, TimeUnit.SECONDS);
@@ -148,7 +164,7 @@ class PaxosReplicateInputMachineTest {
                 fail(e);
             }
         });
-        Stream.iterate(1, i -> i + 1).limit(concurrentLevel).parallel().forEach(i -> {
+        Stream.iterate(1, i -> i + 1).limit(instanceNo).parallel().forEach(i -> {
             Input input = other.newState(("other content" + i).getBytes());
             try {
                 other.submit(input).get(1, TimeUnit.SECONDS);
@@ -164,7 +180,7 @@ class PaxosReplicateInputMachineTest {
         List<CompletableFuture<Output>> myOutputs = Collections.synchronizedList(new ArrayList<>());
         List<CompletableFuture<Output>> otherOutputs = Collections.synchronizedList(new ArrayList<>());
 
-        Stream.iterate(1, i -> i + 1).limit(concurrentLevel).parallel().forEach(i -> {
+        Stream.iterate(1, i -> i + 1).limit(instanceNo).parallel().forEach(i -> {
             try {
                 myOutputs.add(me.submit(me.newState(("my content" + i).getBytes())));
                 otherOutputs.add(other.submit(other.newState(("other content" + i).getBytes())));
@@ -173,17 +189,22 @@ class PaxosReplicateInputMachineTest {
             }
         });
 
-        myOutputs.stream().parallel().forEach(f -> {
+        Optional<Integer> failed = myOutputs.stream().parallel().map(f -> {
             try {
-                Output output1 = f.get(1, TimeUnit.SECONDS);
+                Output output1 = f.get(3, TimeUnit.SECONDS);
                 Output output2 = other.getTransforms().get(output1.getId()).get(3, TimeUnit.SECONDS);
                 assertEquals(output1.getId(), output2.getId());
                 assertEquals(new String(output1.getContent()), new String(output2.getContent()));
                 assertArrayEquals(output1.getUuid(), output2.getUuid());
+                return 0;
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                fail(e);
+                return 1;
             }
-        });
+        }).reduce((i, j) -> i + j);
+
+        assertTrue(failed.isPresent());
+
+        assertTrue(failed.get() < instanceNo / 2);
         keepUp();
     }
 
@@ -192,7 +213,7 @@ class PaxosReplicateInputMachineTest {
         keepUp();
         other.stop();
 
-        Stream.iterate(1, i -> i + 1).limit(concurrentLevel).parallel().forEach(i -> {
+        Stream.iterate(1, i -> i + 1).limit(instanceNo).parallel().forEach(i -> {
             Input input = me.newState(("my content" + i).getBytes());
             try {
                 me.submit(input).get(1, TimeUnit.SECONDS);

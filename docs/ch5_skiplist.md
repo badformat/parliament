@@ -129,9 +129,9 @@ head:
 
 | page no (4 bytes) | page location (4 bytes) | ... | page | page |
 
-## skip list in page
-level 1:
-| level | number of keys | right page | last key len | last key | key len | key | value len | value | ...
+## skip list in page,ascending order
+level > 0:
+| meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | next level page no (4 bytes) | key len | key | next level page no | ...
 
-level > 1:
-| level | number of keys | right page | last key len | last key | key len | key | next page | key len | key | next page | ...
+level 0:
+| meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | value len (4 bytes) | value | ...

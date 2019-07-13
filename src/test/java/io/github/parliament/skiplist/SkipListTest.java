@@ -2,20 +2,24 @@ package io.github.parliament.skiplist;
 
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
-import lombok.Getter;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SkipListTest {
     private static String dir = "./testdir";
+    private static Path path = Paths.get(dir);
     private static int level = 4;
 
     private SkipList skipList;
@@ -23,45 +27,128 @@ class SkipListTest {
 
     @BeforeEach
     void beforeEach() throws IOException {
-        pager = new Pager(dir);
-        skipList = new SkipList();
-        skipList.createMetaInf(dir, level);
-        skipList.setPager(pager);
+        Pager.init(path, 128, 32);
+        pager = Pager.builder().path(path).build();
 
-        byte[] bytes = Files.readAllBytes(Paths.get(dir, "skiplist.mf"));
-        ByteBuffer buf = ByteBuffer.wrap(bytes);
-        assertEquals(level, buf.getInt());
-        assertEquals(-1, buf.getInt());
+        SkipList.init(path, level, pager);
+        skipList = SkipList.builder().path(path).pager(pager).build();
+    }
+
+    @AfterEach
+    void afterEach() throws IOException {
+        Files.walk(path).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
     }
 
     @Test
-    void firstPut() throws IOException {
+    void init() throws IOException {
+        byte[] bytes = Files.readAllBytes(Paths.get(dir, "skiplist.mf"));
+        ByteBuffer buf = ByteBuffer.wrap(bytes);
+        assertEquals(level, buf.getInt());
+        int lv = 0;
+        while (lv < level) {
+            assertEquals(lv, buf.getInt());
+            lv++;
+        }
+    }
+
+    @Test
+    void put() throws IOException {
         byte[] key = "key".getBytes();
         byte[] value = "value".getBytes();
 
         skipList.put(key, value);
 
-        byte[] bytes = Files.readAllBytes(Paths.get(dir, "skiplist.mf"));
-        ByteBuffer buf = ByteBuffer.wrap(bytes);
-        assertEquals(level, buf.getInt());
+        skipList.sync();
 
-        int pageNo = buf.getInt();
-        Page page = pager.page(pageNo);
-        // level
-        assertEquals(1, page.getNo());
-        // size
-        assertEquals(1, page.getNo());
-        // right page no
-        assertEquals(-1, page.getNo());
-        // length of last key
-        assertEquals(key.length, page.getNo());
-        // last key
-        assertArrayEquals(key, page.getBytes(key.length));
-        // first key length and first key
-        assertEquals(key.length, page.getNo());
-        assertArrayEquals(key, page.getBytes(key.length));
-        // first value length and first value
-        assertEquals(value.length, page.getNo());
-        assertArrayEquals(value, page.getBytes(value.length));
+        Page page = pager.getOrCreatePage(0);
+
+        ByteBuffer buf = ByteBuffer.wrap(page.getContent());
+
+        byte firstLevel = 0x00;
+        byte meta = buf.get();
+        assertEquals(firstLevel, meta & 0x0f);
+
+        int rightPageNo = -1;
+        assertEquals(rightPageNo, buf.getInt());
+
+        int keys = 1;
+        assertEquals(keys, buf.getInt());
+
+        int keyLen = key.length;
+        assertEquals(keyLen, buf.getInt());
+        byte[] dstKey = new byte[keyLen];
+        buf.get(dstKey);
+        assertArrayEquals(key, dstKey);
+
+        int valLen = value.length;
+        assertEquals(valLen, buf.getInt());
+        byte[] dstValue = new byte[valLen];
+        buf.get(dstValue);
+        assertArrayEquals(value, dstValue);
+    }
+
+    @Test
+    void putTooLongValue() {
+        byte[] key = "key".getBytes();
+        byte[] value = "Lorem ipsum dolor sit amet, consectetur adipiscing elit".getBytes();
+
+        assertThrows(KeyValueTooLongException.class, () -> skipList.put(key, value));
+    }
+
+    @Test
+    void splitAfterPut() throws IOException {
+        for (int i = 0; i < 9; i++) {
+            skipList.put(String.valueOf(i).getBytes(), ("Lorem ipsum " + i).getBytes());
+        }
+
+        skipList.sync();
+
+        for (int i = 0; i < 9; i++) {
+            Page page = skipList.findLeafPageOfKey(String.valueOf(i).getBytes());
+            assertNotNull(page);
+
+            SkipList.SkipListPage skipListPage = skipList.new SkipListPage(page);
+
+            SkipList.SkipListPage.Node node = skipListPage.getHead();
+            assertNotNull(node);
+
+            while (node != null) {
+                String key = new String(node.getKey());
+                assertEquals("Lorem ipsum " + key, new String(node.getValue()));
+                node = node.getNext();
+            }
+        }
+    }
+
+    @Test
+    void promoAfterPut() throws IOException {
+        for (int i = 0; i < 9; i++) {
+            skipList.put(String.valueOf(i).getBytes(), ("Lorem ipsum " + i).getBytes());
+        }
+
+        skipList.sync();
+
+        byte[] key = String.valueOf(0).getBytes();
+        Page page = skipList.findLeafPageOfKey(key);
+        SkipList.SkipListPage skipListPage = skipList.new SkipListPage(page);
+        skipListPage.promo(key);
+
+        skipList.sync();
+
+        Page leaf = skipList.findLeafPageOfKey(String.valueOf(0).getBytes());
+        assertNotNull(leaf.getUpLevelPage());
+
+        page = skipList.findPageOfKeyInLevel(1, key);
+
+
+        ByteBuffer buf = ByteBuffer.wrap(page.getContent());
+        byte meta = buf.get();
+        assertEquals(1, meta & 0x0f);
+
+        int rightPageNo = buf.getInt();
+        assertEquals(-1, rightPageNo);
+
+        int noOfKeys = buf.getInt();
+        assertEquals(1, noOfKeys);
     }
 }

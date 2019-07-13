@@ -57,7 +57,7 @@ public class Application {
                 .build();
 
         paxosServer.start();
-        logger.info("本地paxos服务启动成功，地址：" + me);
+        logger.info("本地paxos服务启动成功，地址：{}", me);
 
         @NonNull ReplicateStateMachine rsm = ReplicateStateMachine.builder()
                 .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("rsm")).build())

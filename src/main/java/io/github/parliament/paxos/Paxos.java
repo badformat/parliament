@@ -22,18 +22,21 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 
+//TODO acceptor need persistence
 public class Paxos implements Coordinator, LocalAcceptors {
     private static final Logger logger = LoggerFactory.getLogger(Paxos.class);
     private final ConcurrentMap<Integer, Proposer> proposers = new MapMaker()
             .weakValues()
             .makeMap();
     private final Cache<Integer, LocalAcceptor> acceptors = CacheBuilder.newBuilder()
-            .weakValues()
+            .expireAfterWrite(Duration.of(10, ChronoUnit.MINUTES))
             .build();
     private final LoadingCache<Integer, CompletableFuture<byte[]>> proposals = CacheBuilder.newBuilder()
             .weakValues()
@@ -103,7 +106,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
     public Future<byte[]> instance(int round) throws ExecutionException {
         byte[] r = get(round);
         if (r != null) {
-            proposals.get(round).complete(get(round));
+            proposals.get(round).complete(r);
         }
         return proposals.get(round);
     }
