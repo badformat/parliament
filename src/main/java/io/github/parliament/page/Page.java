@@ -12,8 +12,6 @@ public class Page {
     private int location;
     @Getter
     private byte[] content;
-    @Getter
-    private Page upLevelPage;
 
     @Builder
     public Page(int no, int location, @NonNull byte[] content) {
@@ -53,9 +51,5 @@ public class Page {
 
     public synchronized void updateContent(byte[] content) {
         this.content = content;
-    }
-
-    public void setUpLevelPage(Page upLevelPage) {
-        this.upLevelPage = upLevelPage;
     }
 }

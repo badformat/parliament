@@ -2,7 +2,6 @@ package io.github.parliament.skiplist;
 
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +12,8 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,7 +28,7 @@ class SkipListTest {
 
     @BeforeEach
     void beforeEach() throws IOException {
-        Pager.init(path, 128, 32);
+        Pager.init(path, 512, 128);
         pager = Pager.builder().path(path).build();
 
         SkipList.init(path, level, pager);
@@ -60,7 +61,7 @@ class SkipListTest {
 
         skipList.sync();
 
-        Page page = pager.getOrCreatePage(0);
+        Page page = pager.page(0);
 
         ByteBuffer buf = ByteBuffer.wrap(page.getContent());
 
@@ -88,6 +89,11 @@ class SkipListTest {
     }
 
     @Test
+    void split() throws IOException {
+//        SkipList.SkipListPage page；
+    }
+
+    @Test
     void putTooLongValue() {
         byte[] key = "key".getBytes();
         byte[] value = "Lorem ipsum dolor sit amet, consectetur adipiscing elit".getBytes();
@@ -95,21 +101,29 @@ class SkipListTest {
         assertThrows(KeyValueTooLongException.class, () -> skipList.put(key, value));
     }
 
+    void checkSkipListPages() throws IOException {
+        int height = skipList.getHeight();
+        for (int i = 0; i < height; i++) {
+            int p = skipList.getStartPages()[i];
+            Page dp = pager.page(p);
+            SkipList.SkipListPage sp = skipList.new SkipListPage(dp);
+
+        }
+    }
+
     @Test
     void splitAfterPut() throws IOException {
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < 90; i++) {
             skipList.put(String.valueOf(i).getBytes(), ("Lorem ipsum " + i).getBytes());
         }
 
         skipList.sync();
 
-        for (int i = 0; i < 9; i++) {
-            Page page = skipList.findLeafPageOfKey(String.valueOf(i).getBytes());
+        for (int i = 0; i < 90; i++) {
+            SkipList.SkipListPage page = skipList.findLeafSkipListPageOfKey(String.valueOf(i).getBytes());
             assertNotNull(page);
 
-            SkipList.SkipListPage skipListPage = skipList.new SkipListPage(page);
-
-            SkipList.SkipListPage.Node node = skipListPage.getHead();
+            SkipList.SkipListPage.Node node = page.getHead();
             assertNotNull(node);
 
             while (node != null) {
@@ -122,33 +136,28 @@ class SkipListTest {
 
     @Test
     void promoAfterPut() throws IOException {
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < 90; i++) {
+            Instant begin = Instant.now();
             skipList.put(String.valueOf(i).getBytes(), ("Lorem ipsum " + i).getBytes());
+            Instant end = Instant.now();
+
+            System.out.println(Duration.between(begin, end).toMillis());
         }
 
         skipList.sync();
 
         byte[] key = String.valueOf(0).getBytes();
-        Page page = skipList.findLeafPageOfKey(key);
-        SkipList.SkipListPage skipListPage = skipList.new SkipListPage(page);
-        skipListPage.promo(key);
 
-        skipList.sync();
+        SkipList.SkipListPage leaf = skipList.findLeafSkipListPageOfKey(key);
+        assertNotNull(leaf.getSuperPage());
 
-        Page leaf = skipList.findLeafPageOfKey(String.valueOf(0).getBytes());
-        assertNotNull(leaf.getUpLevelPage());
-
-        page = skipList.findPageOfKeyInLevel(1, key);
-
-
-        ByteBuffer buf = ByteBuffer.wrap(page.getContent());
-        byte meta = buf.get();
-        assertEquals(1, meta & 0x0f);
-
-        int rightPageNo = buf.getInt();
-        assertEquals(-1, rightPageNo);
-
-        int noOfKeys = buf.getInt();
-        assertEquals(1, noOfKeys);
+        int i = 0;
+        SkipList.SkipListPage.Node node = leaf.getHead();
+        while (node != null) {
+            i++;
+            node = node.getNext();
+        }
+        assertTrue(i < 9);
+        assertTrue(i >= 1);
     }
 }

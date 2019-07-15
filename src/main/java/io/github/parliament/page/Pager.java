@@ -88,19 +88,22 @@ public class Pager {
         }
     }
 
-    public Page getOrCreatePage(int pn) throws IOException {
-        Heap heap = getHeapOfPage(pn);
+    public Page page(int pn) throws IOException {
+        Heap heap = heap(pn);
+        if(heap == null) {
+            return null;
+        }
         return heap.page(pn);
     }
 
     public Page allocate() throws IOException {
         int pn = getAndIncrement();
-        Heap heap = getHeapOfPage(pn);
+        Heap heap = allocateHeap(pn);
         return heap.allocate(pn);
     }
 
     public void sync(Page page) throws IOException {
-        Heap heap = getHeapOfPage(page.getNo());
+        Heap heap = allocateHeap(page.getNo());
         heap.sync(page);
     }
 
@@ -122,7 +125,24 @@ public class Pager {
         }
     }
 
-    synchronized Heap getHeapOfPage(int pageNo) throws IOException {
+    synchronized Heap heap(int pageNo) throws IOException {
+        Preconditions.checkArgument(pageNo >= 0);
+        int heap = getHeapNoOfPage(pageNo);
+        Path heapPath = getHeapPath(heap);
+        if(!Files.exists(heapPath)) {
+            return null;
+        }
+
+        if (heaps.containsKey(heap)) {
+            return heaps.get(heap);
+        }
+
+        Heap h = new Heap(heapPath);
+        heaps.put(heap, h);
+        return h;
+    }
+
+    synchronized Heap allocateHeap(int pageNo) throws IOException {
         Preconditions.checkArgument(pageNo >= 0);
         int heap = getHeapNoOfPage(pageNo);
         Path heapPath = getHeapPath(heap);
