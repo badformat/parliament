@@ -3,6 +3,7 @@ package io.github.parliament.kv;
 import com.google.common.base.Preconditions;
 import io.github.parliament.*;
 import io.github.parliament.resp.*;
+import io.github.parliament.skiplist.SkipList;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -45,19 +47,21 @@ public class KeyValueEngine implements StateTransfer {
     private static final String PUT_CMD = "put";
     private static final String GET_CMD = "get";
     private static final String DEL_CMD = "del";
+    private static final String RANGE_CMD = "range";
+
     private ExecutorService executorService;
     @Getter(AccessLevel.PACKAGE)
-    private Persistence persistence;
+    private SkipList skipList;
     @Getter(AccessLevel.PACKAGE)
     private ReplicateStateMachine rsm;
 
     @Builder
     KeyValueEngine(@NonNull ExecutorService executorService,
                    @NonNull ReplicateStateMachine rsm,
-                   @NonNull Persistence persistence) {
+                   @NonNull SkipList skipList) {
         this.executorService = executorService;
         this.rsm = rsm;
-        this.persistence = persistence;
+        this.skipList = skipList;
     }
 
     public void start() throws IOException {
@@ -93,7 +97,7 @@ public class KeyValueEngine implements StateTransfer {
 
     }
 
-    private void checkSubmitted(RespArray request) throws UnknownKeyValueCommand {
+    private void checkSubmitted(RespArray request) throws UnknownKeyValueCommand, IOException {
         if (request.size() == 0) {
             throw new UnknownKeyValueCommand("empty command");
         }
@@ -115,6 +119,9 @@ public class KeyValueEngine implements StateTransfer {
                     Preconditions.checkState(key instanceof RespBulkString);
                 }
                 break;
+            case RANGE_CMD:
+                Preconditions.checkState(3 == request.getDatas().size());
+                break;
             default:
                 throw new UnknownKeyValueCommand("unknown command:" + cmdStr);
         }
@@ -124,10 +131,10 @@ public class KeyValueEngine implements StateTransfer {
         return (Future<T>) submit(bytes);
     }
 
-    int del(List<RespBulkString> keys) throws IOException {
+    int del(List<RespBulkString> keys) throws IOException, ExecutionException {
         int deleted = 0;
         for (RespBulkString key : keys) {
-            if (persistence.remove(key.getContent())) {
+            if (skipList.del(key.getContent())) {
                 deleted++;
             }
         }
@@ -135,7 +142,7 @@ public class KeyValueEngine implements StateTransfer {
     }
 
     @Override
-    public Output transform(Input input) throws IOException {
+    public Output transform(Input input) throws IOException, ExecutionException {
         RespArray request = RespDecoder.create().decode(input.getContent()).get();
         RespBulkString cmd = request.get(0);
         String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
@@ -145,17 +152,30 @@ public class KeyValueEngine implements StateTransfer {
             case PUT_CMD:
                 RespBulkString key = request.get(1);
                 RespBulkString value = request.get(2);
-                persistence.put(key.getContent(), value.getContent());
+                skipList.put(key.getContent(), value.getContent());
+                skipList.sync();
                 resp = RespInteger.with(1);
                 break;
             case GET_CMD:
                 key = request.get(1);
-                byte[] v = persistence.get(key.getContent());
+                byte[] v = skipList.get(key.getContent());
                 resp = v == null ? RespBulkString.nullBulkString() : RespBulkString.with(v);
                 break;
             case DEL_CMD:
                 List<RespBulkString> keys = request.getDatas();
                 resp = RespInteger.with(del(keys.subList(1, keys.size())));
+                skipList.sync();
+                break;
+            case RANGE_CMD:
+                key = request.get(1);
+                RespBulkString end = request.get(2);
+                List<byte[]> r = skipList.range(key.getContent(), end.getContent());
+
+                List<RespData> a = new ArrayList<>();
+                r.forEach(bytes -> {
+                    a.add(RespBulkString.with(bytes));
+                });
+                resp = RespArray.with(a);
                 break;
             default:
                 resp = RespError.withUTF8("Unknown key value command: " + cmdStr);

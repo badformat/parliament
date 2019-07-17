@@ -12,27 +12,29 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Comparator;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SkipListTest {
     private static String dir = "./testdir";
     private static Path path = Paths.get(dir);
-    private static int level = 4;
+    private static int level = 6;
 
     private SkipList skipList;
     private Pager pager;
+    private ThreadLocalRandom random = ThreadLocalRandom.current();
 
     @BeforeEach
     void beforeEach() throws IOException {
-        Pager.init(path, 512, 128);
+        Pager.init(path, 512, 64);
         pager = Pager.builder().path(path).build();
 
         SkipList.init(path, level, pager);
         skipList = SkipList.builder().path(path).pager(pager).build();
+        skipList.setGetAfterPut(true);
     }
 
     @AfterEach
@@ -53,15 +55,14 @@ class SkipListTest {
     }
 
     @Test
-    void put() throws IOException {
+    void put() throws IOException, ExecutionException {
         byte[] key = "key".getBytes();
         byte[] value = "value".getBytes();
-
         skipList.put(key, value);
 
         skipList.sync();
 
-        Page page = pager.page(0);
+        Page page = pager.page(skipList.getStartPages()[0]);
 
         ByteBuffer buf = ByteBuffer.wrap(page.getContent());
 
@@ -89,75 +90,149 @@ class SkipListTest {
     }
 
     @Test
-    void split() throws IOException {
-//        SkipList.SkipListPage page；
-    }
-
-    @Test
     void putTooLongValue() {
         byte[] key = "key".getBytes();
-        byte[] value = "Lorem ipsum dolor sit amet, consectetur adipiscing elit".getBytes();
+        byte[] value = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit" +
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit" +
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit" +
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit" +
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit").getBytes();
 
         assertThrows(KeyValueTooLongException.class, () -> skipList.put(key, value));
     }
 
-    void checkSkipListPages() throws IOException {
-        int height = skipList.getHeight();
-        for (int i = 0; i < height; i++) {
-            int p = skipList.getStartPages()[i];
-            Page dp = pager.page(p);
-            SkipList.SkipListPage sp = skipList.new SkipListPage(dp);
+    @Test
+    void splitAfterPut() throws IOException, ExecutionException {
+        skipList.setAlwaysPromo(true);
+        int limit = 40;
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            byte[] value = ("Lorem ipsum " + i).getBytes();
+            skipList.put(key, value);
+            assertEquals(value, skipList.get(key));
+        }
 
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            byte[] value = ("Lorem ipsum " + i).getBytes();
+            assertArrayEquals(value, skipList.get(key));
         }
     }
 
     @Test
-    void splitAfterPut() throws IOException {
-        for (int i = 0; i < 90; i++) {
-            skipList.put(String.valueOf(i).getBytes(), ("Lorem ipsum " + i).getBytes());
+    void promoAfterPut() throws IOException, ExecutionException {
+        int limit = 40;
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(random.nextInt()).getBytes();
+            byte[] value = ("Lorem ipsum " + random.nextInt()).getBytes();
+            skipList.put(key, value);
+            assertEquals(value, skipList.get(key));
+        }
+    }
+
+    @Test
+    void get() throws IOException, ExecutionException {
+        skipList.put("key".getBytes(), "value".getBytes());
+        assertArrayEquals("value".getBytes(), skipList.get("key".getBytes()));
+    }
+
+    @Test
+    void repeatGet() throws IOException, ExecutionException {
+        skipList.setGetAfterPut(false);
+        List<byte[]> keys = new ArrayList<>();
+        Map<byte[], byte[]> kvs = new HashMap<>();
+
+        int limit = 40;
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(random.nextInt()).getBytes();
+            byte[] value = ("Lorem ipsum " + random.nextInt()).getBytes();
+            skipList.put(key, value);
+            keys.add(key);
+            kvs.put(key, value);
         }
 
-        skipList.sync();
-
-        for (int i = 0; i < 90; i++) {
-            SkipList.SkipListPage page = skipList.findLeafSkipListPageOfKey(String.valueOf(i).getBytes());
-            assertNotNull(page);
-
-            SkipList.SkipListPage.Node node = page.getHead();
-            assertNotNull(node);
-
-            while (node != null) {
-                String key = new String(node.getKey());
-                assertEquals("Lorem ipsum " + key, new String(node.getValue()));
-                node = node.getNext();
+        keys.forEach(k -> {
+            try {
+                byte[] value = skipList.get(k);
+                assertArrayEquals(kvs.get(k), value);
+            } catch (IOException | ExecutionException e) {
+                fail(e);
             }
+        });
+    }
+
+    @Test
+    void orderRange() throws IOException, ExecutionException {
+        int limit = 9;
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            byte[] value = String.valueOf(i).getBytes();
+            skipList.put(key, value);
+        }
+
+        List<byte[]> values = skipList.range(String.valueOf(0).getBytes(), String.valueOf(limit).getBytes());
+        for (int i = 0; i < limit; i++) {
+            byte[] v = values.get(i);
+            assertArrayEquals(v, String.valueOf(i).getBytes());
         }
     }
 
     @Test
-    void promoAfterPut() throws IOException {
-        for (int i = 0; i < 90; i++) {
-            Instant begin = Instant.now();
-            skipList.put(String.valueOf(i).getBytes(), ("Lorem ipsum " + i).getBytes());
-            Instant end = Instant.now();
-
-            System.out.println(Duration.between(begin, end).toMillis());
+    void range() throws IOException, ExecutionException {
+        int limit = 40;
+        byte[] min = new byte[0];
+        byte[] max = new byte[0];
+        List<byte[]> values = new ArrayList<>();
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(random.nextInt()).getBytes();
+            if (Arrays.compare(max, key) <= 0) {
+                max = key;
+            }
+            byte[] value = ("Lorem ipsum " + random.nextInt()).getBytes();
+            values.add(value);
+            skipList.put(key, value);
+            assertEquals(value, skipList.get(key));
         }
 
-        skipList.sync();
+        values.sort(Arrays::compare);
+
+        List<byte[]> range = skipList.range(min, max);
+        range.sort(Arrays::compare);
+        assertIterableEquals(values, range);
+    }
+
+    @Test
+    void del() throws IOException, ExecutionException {
+        int limit = 9;
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            byte[] value = String.valueOf(i).getBytes();
+            skipList.put(key, value);
+        }
 
         byte[] key = String.valueOf(0).getBytes();
+        skipList.del(key);
+        assertNull(skipList.get(key));
+    }
 
-        SkipList.SkipListPage leaf = skipList.findLeafSkipListPageOfKey(key);
-        assertNotNull(leaf.getSuperPage());
-
-        int i = 0;
-        SkipList.SkipListPage.Node node = leaf.getHead();
-        while (node != null) {
-            i++;
-            node = node.getNext();
+    @Test
+    void delAll() throws IOException, ExecutionException {
+        int limit = 200;
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            byte[] value = String.valueOf(i).getBytes();
+            skipList.put(key, value);
         }
-        assertTrue(i < 9);
-        assertTrue(i >= 1);
+
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            skipList.del(key);
+        }
+
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+
+            assertNull(skipList.get(key));
+        }
     }
 }

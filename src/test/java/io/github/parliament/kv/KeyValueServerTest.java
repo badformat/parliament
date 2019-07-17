@@ -1,17 +1,26 @@
 package io.github.parliament.kv;
 
 import io.github.parliament.*;
+import io.github.parliament.page.Pager;
 import io.github.parliament.resp.*;
+import io.github.parliament.skiplist.SkipList;
+import lombok.NonNull;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -32,10 +41,17 @@ class KeyValueServerTest {
 
     @BeforeAll
     static void beforeAll() throws Exception {
+        Path path = Paths.get("./testdb");
+        Pager.init(path, 512, 64);
+        Pager pager = Pager.builder().path(path).build();
+
+        SkipList.init(path, 6, pager);
+        SkipList skipList = SkipList.builder().path(path).pager(pager).build();
+
         ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
         KeyValueEngine engine = KeyValueEngine.builder()
                 .executorService(mock(ExecutorService.class))
-                .persistence(mock(Persistence.class))
+                .skipList(skipList)
                 .rsm(rsm)
                 .build();
 
@@ -60,6 +76,7 @@ class KeyValueServerTest {
     static void afterAll() throws IOException {
         client.close();
         server.shutdown();
+        Files.walk(Paths.get("./testdb")).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
     }
 
     /**

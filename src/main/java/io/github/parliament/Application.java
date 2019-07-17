@@ -2,6 +2,7 @@ package io.github.parliament;
 
 import io.github.parliament.kv.KeyValueEngine;
 import io.github.parliament.kv.KeyValueServer;
+import io.github.parliament.page.Pager;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.ConnectionPool;
@@ -9,12 +10,14 @@ import io.github.parliament.paxos.client.InetLeaner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import io.github.parliament.paxos.server.PaxosServer;
+import io.github.parliament.skiplist.SkipList;
 import lombok.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,8 +68,13 @@ public class Application {
                 .coordinator(paxos)
                 .build();
 
+        Path dbPath = Paths.get(dir).resolve("db");
+        Pager.init(dbPath, Pager.MAX_HEAP_SIZE, 64 * 1024);
+        @NonNull Pager pager = Pager.builder().path(dbPath).build();
+        SkipList.init(dbPath, 6, pager);
+        @NonNull SkipList skipList = SkipList.builder().pager(pager).path(dbPath).build();
         KeyValueEngine keyValueEngine = KeyValueEngine.builder()
-                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("db")).build())
+                .skipList(skipList)
                 .executorService(executorService)
                 .rsm(rsm)
                 .build();

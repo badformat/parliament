@@ -1,5 +1,10 @@
 package io.github.parliament.page;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.MapMaker;
+import lombok.Builder;
+import lombok.Getter;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -9,14 +14,8 @@ import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
-import com.google.common.base.Preconditions;
-
-import com.google.common.collect.MapMaker;
-import lombok.Builder;
-import lombok.Getter;
-
 public class Pager {
-    public static final int MAX_HEAP_SIZE = 4 * 1024 * 1024 * 1024;
+    public static final int MAX_HEAP_SIZE = 1024 * 1024 * 1024;
     public static final String PAGE_SEQ_FILENAME = "page_seq";
     public static final String METAINF_FILENAME = "metainf";
     public static final String HEAP_FILENAME_PREFIX = "heap";
@@ -30,7 +29,7 @@ public class Pager {
     private int pageSize;
     @Getter
     private int pagesInHeap;
-    private ConcurrentMap<Integer, Heap> heaps = new MapMaker().makeMap();
+    private ConcurrentMap<Integer, Heap> heaps = new MapMaker().weakValues().makeMap();
 
     public static void init(Path path, int heapSize, int pageSize) throws IOException {
         if (!Files.exists(path)) {
@@ -88,9 +87,9 @@ public class Pager {
         }
     }
 
-    public Page page(int pn) throws IOException {
+    public Page page(Integer pn) throws IOException {
         Heap heap = heap(pn);
-        if(heap == null) {
+        if (heap == null) {
             return null;
         }
         return heap.page(pn);
@@ -107,7 +106,7 @@ public class Pager {
         heap.sync(page);
     }
 
-    private synchronized int getAndIncrement() throws IOException {
+    private int getAndIncrement() throws IOException {
         try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_SEQ_FILENAME),
                 StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.DSYNC)) {
             ByteBuffer dst = ByteBuffer.allocate(4);
@@ -125,11 +124,11 @@ public class Pager {
         }
     }
 
-    synchronized Heap heap(int pageNo) throws IOException {
+    Heap heap(int pageNo) throws IOException {
         Preconditions.checkArgument(pageNo >= 0);
         int heap = getHeapNoOfPage(pageNo);
         Path heapPath = getHeapPath(heap);
-        if(!Files.exists(heapPath)) {
+        if (!Files.exists(heapPath)) {
             return null;
         }
 
@@ -142,7 +141,7 @@ public class Pager {
         return h;
     }
 
-    synchronized Heap allocateHeap(int pageNo) throws IOException {
+    Heap allocateHeap(int pageNo) throws IOException {
         Preconditions.checkArgument(pageNo >= 0);
         int heap = getHeapNoOfPage(pageNo);
         Path heapPath = getHeapPath(heap);
@@ -261,7 +260,7 @@ public class Pager {
             }
         }
 
-        synchronized private Head allocateSpaceFor(Head head) throws IOException {
+        private Head allocateSpaceFor(Head head) throws IOException {
             int location = (int) Files.size(heapPath);
             try (SeekableByteChannel chn = Files.newByteChannel(heapPath, StandardOpenOption.APPEND)) {
                 ByteBuffer buf = ByteBuffer.allocate(pageSize);

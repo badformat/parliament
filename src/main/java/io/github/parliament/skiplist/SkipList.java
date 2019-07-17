@@ -1,7 +1,10 @@
 package io.github.parliament.skiplist;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.MapMaker;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalListener;
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
 import lombok.*;
@@ -12,9 +15,13 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.concurrent.ConcurrentMap;
+import java.util.*;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class SkipList {
     static final String META_FILE_NAME = "skiplist.mf";
@@ -28,12 +35,34 @@ public class SkipList {
     private int height;
     @Getter(AccessLevel.PACKAGE)
     private int[] startPages;
+    private List<SkipListPage> dirtyPages = Collections.synchronizedList(new ArrayList<>());
     @Getter(AccessLevel.PACKAGE)
-    private ConcurrentMap<Integer, SkipListPage> skipListPages = new MapMaker().makeMap();
+    private final LoadingCache<Integer, SkipListPage> skipListPages = CacheBuilder.newBuilder().weakValues()
+            .removalListener((RemovalListener<Integer, SkipListPage>) notification -> {
+                        dirtyPages.add(notification.getValue());
+                    }
+            ).build(new CacheLoader<>() {
+                @Override
+                public SkipListPage load(Integer pn) throws Exception {
+                    return new SkipListPage(pager.page(pn));
+                }
+            });
+
+    @Getter(AccessLevel.PACKAGE)
+    @Setter(AccessLevel.PACKAGE)
+    private boolean alwaysPromo = false;
+
+    @Getter(AccessLevel.PACKAGE)
+    @Setter(AccessLevel.PACKAGE)
+    private boolean getAfterPut = false;
+
+    private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
     public static void init(Path path, int height, Pager pager) throws IOException {
         Path metaFilePath = path.resolve(META_FILE_NAME);
-        Preconditions.checkState(!Files.exists(metaFilePath));
+        if (Files.exists(metaFilePath)) {
+            return;
+        }
         Preconditions.checkArgument(height > 0);
         Preconditions.checkArgument(height <= 0x0f);
 
@@ -65,26 +94,26 @@ public class SkipList {
     }
 
     @EqualsAndHashCode
-    @ToString
+    @ToString(exclude = "superPage")
     class SkipListPage {
         @Getter
-        private Page page;
+        private volatile Page page;
         @Getter
-        private byte meta;
+        private volatile byte meta;
         @Getter
-        private int level;
+        private volatile int level;
         @Getter
-        private int size;
+        private volatile int size;
         @Getter
-        private int rightPage;
+        private volatile int rightPage;
         @Getter
-        private int keys;
+        private volatile int keys;
         @Getter
-        private boolean isLeaf;
+        private volatile boolean isLeaf;
         @Getter
-        private Node head;
+        private ConcurrentNavigableMap<byte[], byte[]> map;
         @Getter
-        private SkipListPage superPage;
+        private volatile SkipListPage superPage;
 
         SkipListPage(Page page) {
             this.page = page;
@@ -95,7 +124,7 @@ public class SkipList {
             rightPage = buf.getInt();
             keys = buf.getInt();
             size = HEAD_SIZE_IN_PAGE;
-            Node pre = null;
+            map = new ConcurrentSkipListMap<>(Arrays::compare);
             if (keys > 0) {
                 int cur = keys;
                 while (cur > 0) {
@@ -120,19 +149,13 @@ public class SkipList {
                     buf.get(value);
                     size += valueLen;
 
-                    if (head == null) {
-                        head = new Node(key, value);
-                        pre = head;
-                    } else {
-                        pre.next = new Node(key, value);
-                        pre = pre.next;
-                    }
+                    map.put(key, value);
                     cur--;
                 }
             }
         }
 
-        void put(byte[] key, byte[] value) throws IOException {
+        void put(byte[] key, byte[] value) throws IOException, ExecutionException {
             int size = 4 + key.length + value.length;
             if (isLeaf) {
                 // value length field.
@@ -142,62 +165,30 @@ public class SkipList {
             if (size > pager.getPageSize()) {
                 throw new KeyValueTooLongException("Can't put the key and value in one page.");
             }
+            map.put(key, value);
+            update();
 
-            SkipListPage page = this;
-            int left = pager.getPageSize() - this.getSize();
-            if (size > left) {
-                synchronized (page.getPage()) {
-                    // check left size
-                    // allocate a new page and insert it into list
-                    page = page.split();
-                    left = pager.getPageSize() - page.getSize();
-                    Preconditions.checkState(left >= size);
-                }
-            }
-
-            synchronized (page.getPage()) {
-                int cur = page.keys;
-                if (cur == 0) {
-                    Preconditions.checkState(page.head == null);
-                    page.head = page.new Node(key, value);
-                    page.update();
-                    return;
-                }
-                SkipListPage.Node node = page.getHead();
-                SkipListPage.Node pre = node;
-                while (cur > 0) {
-                    // get key
-                    int c = Arrays.compare(key, node.getKey());
-                    if (c < 0) {
-                        node = node.getNext();
-                        pre = node;
-                    } else if (c > 0) {
-                        // to insert
-                        SkipListPage.Node newNode = page.new Node(key, value);
-                        pre.append(newNode);
-                        update();
-                        return;
-                    } else {
-                        // to replace
-                        node.updateValue(value);
-                        update();
-                        return;
-                    }
-                    cur--;
-                }
-
-                SkipListPage.Node newNode = page.new Node(key, value);
-
-                if (pre != null) {
-                    pre.append(newNode);
-                } else {
-                    this.head = newNode;
-                }
-                page.update();
-            }
+            promo(key);
         }
 
-        void promo(byte[] key) throws IOException {
+        byte[] get(byte[] key) {
+            return map.get(key);
+        }
+
+        boolean del(byte[] key) throws IOException, ExecutionException {
+            boolean d = map.remove(key) != null;
+            update();
+            return d;
+        }
+
+        void promo(byte[] key) throws IOException, ExecutionException {
+            if (!alwaysPromo) {
+                ThreadLocalRandom random = ThreadLocalRandom.current();
+                if (random.nextBoolean()) {
+                    return;
+                }
+            }
+
             Preconditions.checkState(level < SkipList.this.height);
             if (level == SkipList.this.height - 1) {
                 return;
@@ -208,60 +199,68 @@ public class SkipList {
 
             byte[] value = ByteBuffer.allocate(4).putInt(page.getNo()).array();
             superPage.put(key, value);
-            ThreadLocalRandom random = ThreadLocalRandom.current();
-            if (random.nextBoolean()) {
-                superPage.promo(key);
-            }
         }
 
-        SkipListPage split() throws IOException {
-            Preconditions.checkState(this.keys > 0);
-            Page p = SkipList.this.allocatePage(level);
-            SkipListPage page = skipListPages.computeIfAbsent(p.getNo(), (pn) -> new SkipListPage(p));
-
-            int right = this.rightPage;
-            page.rightPage = right;
-            this.rightPage = page.getPage().getNo();
-
-            this.update();
-            page.update();
-            return page;
-        }
-
-        private void update() {
+        private void update() throws IOException, ExecutionException {
             int s = HEAD_SIZE_IN_PAGE;
             int k = 0;
 
-            Node node = head;
-            while (node != null) {
-                k++;
-                s += node.key.length;
+            for (byte[] key : map.keySet()) {
+                s += key.length;
                 s += 4;
-                s += node.value.length;
+                s += map.get(key).length;
                 if (isLeaf) {
                     s += 4;
                 }
-                node = node.next;
+                k++;
             }
             size = s;
             keys = k;
+
+            int left = pager.getPageSize() - this.getSize();
+            if (left < 0) {
+                // check left size
+                // allocate a new page and insert it into list
+                split();
+            }
+            dirtyPages.add(this);
+        }
+
+        private void split() throws IOException, ExecutionException {
+            Preconditions.checkState(this.keys > 0);
+            Preconditions.checkState(!map.isEmpty());
+            Page p = SkipList.this.allocatePage(level);
+            SkipListPage page = skipListPages.get(p.getNo());
+
+            page.map = new ConcurrentSkipListMap<>(map.tailMap(map.firstKey(), false));
+            Preconditions.checkState(!map.isEmpty());
+            map = new ConcurrentSkipListMap<>(map.headMap(map.firstKey(), true));
+
+            int right = this.rightPage;
+            this.rightPage = page.getPage().getNo();
+            page.rightPage = right;
+
+            this.update();
+            page.update();
+
+            Preconditions.checkState(pager.getPageSize() - this.getSize() >= 0);
+            Preconditions.checkState(pager.getPageSize() - page.getSize() >= 0);
         }
 
         private void sync() throws IOException {
-            update();
             ByteBuffer buf = ByteBuffer.wrap(new byte[size]);
             buf.put(meta);
             buf.putInt(rightPage);
             buf.putInt(keys);
-            Node node = head;
-            while (node != null) {
-                buf.putInt(node.key.length);
-                buf.put(node.key);
+
+            for (byte[] key : map.keySet()) {
+                buf.putInt(key.length);
+                buf.put(key);
+                byte[] value = map.get(key);
                 if (isLeaf) {
-                    buf.putInt(node.value.length);
+                    buf.putInt(value.length);
                 }
-                buf.put(node.value);
-                node = node.next;
+                buf.put(value);
             }
 
             page.updateContent(buf.array());
@@ -270,41 +269,17 @@ public class SkipList {
         }
 
         void setSuperPage(SkipListPage superPage) {
+            Preconditions.checkArgument(this != superPage);
+            if (superPage != null) {
+                Preconditions.checkArgument(this.getPage().getNo() != superPage.getPage().getNo());
+            }
+
             this.superPage = superPage;
         }
-
-        class Node {
-            @Getter
-            private byte[] key;
-            @Getter
-            private byte[] value;
-            @Getter
-            @Setter(AccessLevel.PRIVATE)
-            private Node next;
-
-            private Node(byte[] key, byte[] value) {
-                this.key = key;
-                this.value = value;
-            }
-
-            private void append(Node newNode) {
-                newNode.next = this.next;
-                this.next = newNode;
-            }
-
-            private void updateValue(byte[] value) {
-                this.value = value;
-            }
-        }
-
-    }
-
-    private Page firstPageOfLevel(int level) throws IOException {
-        return pager.page(startPages[level]);
     }
 
     @Builder
-    private SkipList(@NonNull Path path, @NonNull Pager pager) throws IOException {
+    public SkipList(@NonNull Path path, @NonNull Pager pager) throws IOException {
         this.path = path;
         this.pager = pager;
         metaFilePath = path.resolve(META_FILE_NAME);
@@ -333,146 +308,159 @@ public class SkipList {
         }
     }
 
-    public void put(byte[] key, byte[] value) throws IOException {
-        int size = HEAD_SIZE_IN_PAGE + 4 + key.length + 4 + value.length;
-        if (size > pager.getPageSize()) {
-            throw new KeyValueTooLongException("Can't put the key and value in one page.");
-        }
+    public void put(byte[] key, byte[] value) throws IOException, ExecutionException {
+        try {
+            readWriteLock.writeLock().lock();
+            int size = HEAD_SIZE_IN_PAGE + 4 + key.length + 4 + value.length;
+            if (size > pager.getPageSize()) {
+                throw new KeyValueTooLongException("Can't put the key and value in one page.");
+            }
 
-        SkipListPage page = findLeafSkipListPageOfKey(key);
-        page.put(key, value);
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        if (random.nextBoolean()) {
-            page.promo(key);
-        }
-    }
-
-    void sync() throws IOException {
-        for (SkipListPage page : skipListPages.values()) {
-            page.sync();
-        }
-    }
-
-    SkipListPage findLeafSkipListPageOfKey(byte[] key) throws IOException {
-        return findSkipListPageOfKey(key, 0);
-    }
-
-    SkipListPage findSkipListPageOfKey(byte[] key, int lv) throws IOException {
-        Preconditions.checkArgument(lv >= 0);
-        Preconditions.checkArgument(lv < SkipList.this.height);
-        int cur = height - 1;
-        SkipListPage page = null;
-        while (cur > lv) {
-            if (page == null) {
-                page = skipListPages.get(startPages[cur]);
-                if (page == null) {
-                    Page p = pager.page(startPages[cur]);
-                    page = addSkipListPages(p);
+            SkipListPage page = findLeafSkipListPageOfKey(key);
+            page.put(key, value);
+            if (getAfterPut) {
+                byte[] v2 = get(key);
+                if (!Arrays.equals(value, v2)) {
+                    throw new IllegalStateException("get value of key is " + v2);
                 }
             }
-            cur--;
-            byte[] v = findValueNotLessThan(page, key);
-            if (v == null) {
-                page = null;
-            } else {
-                ByteBuffer buf = ByteBuffer.wrap(v);
-                int pn = buf.getInt();
-                Preconditions.checkState(!buf.hasRemaining());
-
-                SkipListPage superPage = page;
-                page = skipListPages.get(pn);
-                if (page == null) {
-                    Page p = pager.page(pn);
-                    page = addSkipListPages(p);
-                }
-                page.setSuperPage(superPage);
-            }
+        } finally {
+            readWriteLock.writeLock().unlock();
         }
-
-        if (page == null) {
-            int pn = startPages[cur];
-            page = skipListPages.get(pn);
-            if (page == null) {
-                Page p = pager.page(pn);
-                page = addSkipListPages(p);
-            }
-        }
-
-        return findMostRightPage(page, key);
     }
 
-    private SkipListPage addSkipListPages(Page p) {
-        return skipListPages.computeIfAbsent(p.getNo(), (k) -> new SkipListPage(p));
-    }
 
-    /**
-     * 从指定page开始查找最后一个小于up的key对应的值
-     *
-     * @param page
-     * @param up
-     * @return
-     * @throws IOException
-     */
-    private byte[] findValueNotLessThan(SkipListPage page, byte[] up) throws IOException {
-        while (page != null) {
-            synchronized (page.getPage()) {
-                SkipListPage.Node node = page.getHead();
-                SkipListPage.Node last = node;
-                while (node != null) {
-                    if (Arrays.compare(up, node.getKey()) > 0) {
-                        node = node.getNext();
-                        last = node;
-                    } else {
-                        return node.getValue();
-                    }
+    public byte[] get(byte[] key) throws IOException, ExecutionException {
+        try {
+            readWriteLock.readLock().lock();
+            SkipListPage page = findLeafSkipListPageOfKey(key);
+            while (page != null) {
+                byte[] v = page.get(key);
+                if (v != null) {
+                    return v;
                 }
-
-                if (page.getRightPage() > 0) {
-                    int pageNo = page.getRightPage();
-                    page = skipListPages.computeIfAbsent(page.getRightPage(), (k) -> {
-                        try {
-                            return new SkipListPage(pager.page(pageNo));
-                        } catch (IOException e) {
-                            return null;
-                        }
-                    });
-                } else {
-                    if (last == null) {
-                        return null;
-                    }
-                    return last.getValue();
-                }
-            }
-        }
-        return null;
-    }
-
-    private SkipListPage findMostRightPage(SkipListPage start, byte[] key) throws IOException {
-        SkipListPage page = start;
-        while (page != null) {
-            synchronized (page.getPage()) {
-                SkipListPage.Node node = page.getHead();
-                while (node != null) {
-                    if (Arrays.compare(key, node.getKey()) > 0) {
-                        node = node.getNext();
-                    } else {
-                        return page;
-                    }
-                }
-
-                if (page.getRightPage() > 0) {
-                    int pn = page.getRightPage();
-                    page = skipListPages.get(pn);
-                    if (page == null) {
-                        Page p = pager.page(pn);
-                        page = addSkipListPages(p);
-                    }
+                if (page.rightPage != -1) {
+                    page = skipListPages.get(page.rightPage);
                 } else {
                     page = null;
                 }
             }
+            return null;
+        } finally {
+            readWriteLock.readLock().unlock();
         }
+    }
+
+    public List<byte[]> range(byte[] min, byte[] max) throws IOException, ExecutionException {
+        try {
+            readWriteLock.readLock().lock();
+            SkipListPage current = findLeafSkipListPageOfKey(min);
+            List<byte[]> r = new ArrayList<>();
+            while (current != null) {
+                if (Arrays.compare(max, current.getMap().firstKey()) < 0) {
+                    return r;
+                }
+                r.addAll(current.getMap().subMap(min, max).values());
+                if (current.getRightPage() != -1) {
+                    current = skipListPages.get(current.getRightPage());
+                } else {
+                    current = null;
+                }
+            }
+            return r;
+        } finally {
+            readWriteLock.readLock().unlock();
+        }
+    }
+
+    public boolean del(byte[] key) throws IOException, ExecutionException {
+        try {
+            readWriteLock.writeLock().lock();
+            SkipListPage current = findLeafSkipListPageOfKey(key);
+            current.del(key);
+            SkipListPage superPage = current.getSuperPage();
+            if (superPage != null) {
+                return superPage.del(key);
+            }
+            return false;
+        } finally {
+            readWriteLock.writeLock().unlock();
+        }
+    }
+
+    public void sync() throws IOException {
+        for (SkipListPage page : dirtyPages) {
+            page.sync();
+        }
+    }
+
+    private SkipListPage findLeafSkipListPageOfKey(byte[] key) throws IOException, ExecutionException {
+        return findSkipListPageOfKey(key, 0);
+    }
+
+    private SkipListPage findSkipListPageOfKey(byte[] key, int lv) throws IOException, ExecutionException {
+        Preconditions.checkArgument(lv >= 0);
+        Preconditions.checkArgument(lv < SkipList.this.height);
+        int cursor = height - 1;
+        SkipListPage start = null;
+        SkipListPage up = null;
+        while (cursor >= lv) {
+            up = start;
+            if (start == null) {
+                start = skipListPages.get(startPages[cursor]);
+            }
+            SkipListPage slice = floorPage(start, key);
+
+            if (cursor == lv) {
+                return slice == null ? start : slice;
+            }
+            if (slice != null) {
+                Map.Entry<byte[], byte[]> e = slice.map.floorEntry(key);
+                int pn = ByteBuffer.wrap(e.getValue()).getInt();
+                start = skipListPages.get(pn);
+                start.setSuperPage(up);
+            } else {
+                start = null;
+            }
+
+            cursor--;
+        }
+
         return start;
+    }
+
+    /**
+     * 从指定page开始查找最后一个小于等于lookup的key对应的page
+     *
+     * @param start
+     * @param key
+     * @return
+     * @throws IOException
+     */
+    private SkipListPage floorPage(SkipListPage start, byte[] key) throws IOException, ExecutionException {
+        SkipListPage current = start;
+        SkipListPage found = null;
+        while (current != null) {
+            Map.Entry<byte[], byte[]> entry = current.map.floorEntry(key);
+            if (entry != null) {
+                found = current;
+            }
+
+            if (current.getRightPage() > 0) {
+                int pn = current.getRightPage();
+                SkipListPage right = skipListPages.get(pn);
+                if (right.map.isEmpty()) {
+                    current.rightPage = right.rightPage;
+                    current.sync();
+                } else {
+                    current = right;
+                }
+
+            } else {
+                current = null;
+            }
+        }
+        return found;
     }
 
     private Page allocatePage(int level) throws IOException {

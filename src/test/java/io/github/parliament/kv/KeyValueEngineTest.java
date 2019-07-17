@@ -1,15 +1,25 @@
 package io.github.parliament.kv;
 
 import io.github.parliament.*;
+import io.github.parliament.page.Pager;
 import io.github.parliament.resp.*;
+import io.github.parliament.skiplist.SkipList;
+import lombok.NonNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -30,18 +40,28 @@ class KeyValueEngineTest {
 
     @BeforeEach
     void beforeEach() throws IOException {
-        persistence = new MockPersistence();
+        Path path = Paths.get("./testdb");
+        Pager.init(path, 512, 64);
+        Pager pager = Pager.builder().path(path).build();
+
+        SkipList.init(path, 6, pager);
+        SkipList skipList = SkipList.builder().path(path).pager(pager).build();
         keyValueEngine = KeyValueEngine.builder()
                 .executorService(executorService)
-                .persistence(persistence)
+                .skipList(skipList)
                 .rsm(rsm)
                 .build();
 
         keyValueEngine.start();
     }
 
+    @AfterEach
+    void afterEach() throws IOException {
+        Files.walk(Paths.get("./testdb")).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+    }
+
     @Test
-    void putAndGet() throws IOException {
+    void putAndGet() throws IOException, ExecutionException {
         Input input = requestState("put", "key", "value");
         keyValueEngine.transform(input);
         input = requestState("get", "key");
