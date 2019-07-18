@@ -33,7 +33,7 @@ class SkipListParallelTest {
 
     @BeforeEach
     void beforeEach() throws IOException {
-        Pager.init(path, 512, 64);
+        Pager.init(path, 64 * 1024, 10 * 1024);
         pager = Pager.builder().path(path).build();
 
         SkipList.init(path, level, pager);

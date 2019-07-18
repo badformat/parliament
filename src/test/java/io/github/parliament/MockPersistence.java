@@ -19,7 +19,7 @@ public class MockPersistence implements Persistence {
     }
 
     @Override
-    public boolean remove(byte[] key) throws IOException {
+    public boolean del(byte[] key) throws IOException {
         return map.remove(toList(key)) != null;
     }
 

@@ -19,21 +19,21 @@ public interface Coordinator {
 
     Future<byte[]> instance(int id) throws ExecutionException;
 
-    void instance(int id, byte[] content) throws IOException;
+    void instance(int id, byte[] content) throws IOException, ExecutionException;
 
     int min();
 
     int done() throws IOException;
 
-    void done(int done) throws IOException;
+    void done(int done) throws IOException, ExecutionException;
 
     int max();
 
-    void max(int m) throws IOException;
+    void max(int m) throws IOException, ExecutionException;
 
-    void forget(int before) throws IOException;
+    void forget(int before) throws IOException, ExecutionException;
 
     byte[] get(int id);
 
-    void learn(int id) throws IOException;
+    void learn(int id) throws IOException, ExecutionException;
 }

@@ -39,7 +39,7 @@ class KeyValueEngineTest {
     private ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
 
     @BeforeEach
-    void beforeEach() throws IOException {
+    void beforeEach() throws IOException, ExecutionException {
         Path path = Paths.get("./testdb");
         Pager.init(path, 512, 64);
         Pager pager = Pager.builder().path(path).build();

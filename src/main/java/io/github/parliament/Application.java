@@ -46,11 +46,19 @@ public class Application {
         @NonNull ConnectionPool connectionPool = ConnectionPool.create(500);
         @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).connectionPool(connectionPool).build();
         @NonNull InetLeaner leaner = InetLeaner.create(connectionPool, peers);
+
+        Path rsmPath = Paths.get(dir).resolve("rsm");
+        Pager.init(rsmPath, Pager.MAX_HEAP_SIZE, 64 * 1024);
+        @NonNull Pager rsmPager = Pager.builder().path(rsmPath).build();
+
+        SkipList.init(rsmPath, 6, rsmPager);
+        @NonNull SkipList rsmSkipList = SkipList.builder().pager(rsmPager).path(rsmPath).build();
+
         @NonNull Paxos paxos = Paxos.builder()
                 .executorService(executorService)
                 .peerAcceptors(acceptors)
                 .learner(leaner)
-                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("paxos")).build())
+                .persistence(rsmSkipList)
                 .sequence(new TimestampSequence())
                 .build();
 
@@ -63,18 +71,18 @@ public class Application {
         logger.info("本地paxos服务启动成功，地址：{}", me);
 
         @NonNull ReplicateStateMachine rsm = ReplicateStateMachine.builder()
-                .persistence(PagePersistence.builder().path(Paths.get(dir).resolve("rsm")).build())
+                .persistence(rsmSkipList)
                 .sequence(new IntegerSequence())
                 .coordinator(paxos)
                 .build();
 
         Path dbPath = Paths.get(dir).resolve("db");
         Pager.init(dbPath, Pager.MAX_HEAP_SIZE, 64 * 1024);
-        @NonNull Pager pager = Pager.builder().path(dbPath).build();
-        SkipList.init(dbPath, 6, pager);
-        @NonNull SkipList skipList = SkipList.builder().pager(pager).path(dbPath).build();
+        @NonNull Pager dbpager = Pager.builder().path(dbPath).build();
+        SkipList.init(dbPath, 6, dbpager);
+        @NonNull SkipList dbSkipList = SkipList.builder().pager(dbpager).path(dbPath).build();
         KeyValueEngine keyValueEngine = KeyValueEngine.builder()
-                .skipList(skipList)
+                .skipList(dbSkipList)
                 .executorService(executorService)
                 .rsm(rsm)
                 .build();

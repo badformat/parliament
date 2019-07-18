@@ -27,7 +27,7 @@ class PaxosTest {
     private InetLeaner leaner;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() throws IOException, ExecutionException {
         List<Acceptor> acceptors = new ArrayList<>();
         acceptors.add(new LocalAcceptor(1) {
             @Override
@@ -96,7 +96,7 @@ class PaxosTest {
     }
 
     @Test
-    void done() throws IOException {
+    void done() throws IOException, ExecutionException {
         paxos.done(4);
         assertEquals(4, paxos.done());
         assertEquals(4, ByteBuffer.wrap(persistence.get("done".getBytes())).getInt());

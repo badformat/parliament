@@ -64,7 +64,7 @@ public class KeyValueEngine implements StateTransfer {
         this.skipList = skipList;
     }
 
-    public void start() throws IOException {
+    public void start() throws IOException, ExecutionException {
         rsm.start(this, executorService);
     }
 
@@ -153,7 +153,6 @@ public class KeyValueEngine implements StateTransfer {
                 RespBulkString key = request.get(1);
                 RespBulkString value = request.get(2);
                 skipList.put(key.getContent(), value.getContent());
-                skipList.sync();
                 resp = RespInteger.with(1);
                 break;
             case GET_CMD:
@@ -164,7 +163,6 @@ public class KeyValueEngine implements StateTransfer {
             case DEL_CMD:
                 List<RespBulkString> keys = request.getDatas();
                 resp = RespInteger.with(del(keys.subList(1, keys.size())));
-                skipList.sync();
                 break;
             case RANGE_CMD:
                 key = request.get(1);

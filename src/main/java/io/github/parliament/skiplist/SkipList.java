@@ -1,13 +1,13 @@
 package io.github.parliament.skiplist;
 
 import com.google.common.base.Preconditions;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalListener;
+import com.google.common.cache.*;
+import io.github.parliament.Persistence;
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
 import lombok.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -15,6 +15,7 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -23,7 +24,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class SkipList {
+public class SkipList implements Persistence {
+    private static final Logger logger = LoggerFactory.getLogger(SkipList.class);
     static final String META_FILE_NAME = "skiplist.mf";
     static final int HEAD_SIZE_IN_PAGE = 1 + 4 + 4;
 
@@ -35,13 +37,18 @@ public class SkipList {
     private int height;
     @Getter(AccessLevel.PACKAGE)
     private int[] startPages;
-    private List<SkipListPage> dirtyPages = Collections.synchronizedList(new ArrayList<>());
     @Getter(AccessLevel.PACKAGE)
-    private final LoadingCache<Integer, SkipListPage> skipListPages = CacheBuilder.newBuilder().weakValues()
+    private final LoadingCache<Integer, SkipListPage> skipListPages = CacheBuilder
+            .newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(5))
             .removalListener((RemovalListener<Integer, SkipListPage>) notification -> {
-                        dirtyPages.add(notification.getValue());
-                    }
-            ).build(new CacheLoader<>() {
+                try {
+                    notification.getValue().sync();
+                } catch (IOException e) {
+                    logger.error("sync skip list page failed.", e);
+                }
+            })
+            .build(new CacheLoader<>() {
                 @Override
                 public SkipListPage load(Integer pn) throws Exception {
                     return new SkipListPage(pager.page(pn));
@@ -114,6 +121,8 @@ public class SkipList {
         private ConcurrentNavigableMap<byte[], byte[]> map;
         @Getter
         private volatile SkipListPage superPage;
+        @Getter
+        private volatile boolean dirty = false;
 
         SkipListPage(Page page) {
             this.page = page;
@@ -153,6 +162,7 @@ public class SkipList {
                     cur--;
                 }
             }
+            dirty = true;
         }
 
         void put(byte[] key, byte[] value) throws IOException, ExecutionException {
@@ -223,7 +233,6 @@ public class SkipList {
                 // allocate a new page and insert it into list
                 split();
             }
-            dirtyPages.add(this);
         }
 
         private void split() throws IOException, ExecutionException {
@@ -247,7 +256,10 @@ public class SkipList {
             Preconditions.checkState(pager.getPageSize() - page.getSize() >= 0);
         }
 
-        private void sync() throws IOException {
+        synchronized void sync() throws IOException {
+            if (!isDirty()) {
+                return;
+            }
             ByteBuffer buf = ByteBuffer.wrap(new byte[size]);
             buf.put(meta);
             buf.putInt(rightPage);
@@ -266,6 +278,7 @@ public class SkipList {
             page.updateContent(buf.array());
 
             SkipList.this.pager.sync(page);
+            dirty = false;
         }
 
         void setSuperPage(SkipListPage superPage) {
@@ -385,12 +398,6 @@ public class SkipList {
             return false;
         } finally {
             readWriteLock.writeLock().unlock();
-        }
-    }
-
-    public void sync() throws IOException {
-        for (SkipListPage page : dirtyPages) {
-            page.sync();
         }
     }
 

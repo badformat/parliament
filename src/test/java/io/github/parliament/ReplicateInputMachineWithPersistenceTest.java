@@ -1,5 +1,8 @@
 package io.github.parliament;
 
+import io.github.parliament.page.Pager;
+import io.github.parliament.skiplist.SkipList;
+import lombok.NonNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -9,6 +12,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
@@ -32,12 +36,16 @@ class ReplicateInputMachineWithPersistenceTest {
     }
 
     static private ReplicateStateMachine create(String dir) throws Exception {
-        PagePersistence persistence = PagePersistence.builder().path(tempDir.resolve(dir)).build();
+        Pager.init(tempDir, 64 * 1024, 16 * 1024);
+        Pager pager = Pager.builder().path(tempDir).build();
+
+        SkipList.init(tempDir, 6, pager);
+        SkipList skipList = SkipList.builder().path(tempDir).pager(pager).build();
         Sequence<Integer> sequence = new IntegerSequence();
         MockPaxos coordinator = new MockPaxos();
         ReplicateStateMachine ret = ReplicateStateMachine
                 .builder()
-                .persistence(persistence)
+                .persistence(skipList)
                 .coordinator(coordinator)
                 .sequence(sequence)
                 .build();

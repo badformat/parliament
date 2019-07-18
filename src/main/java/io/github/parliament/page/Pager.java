@@ -33,7 +33,7 @@ public class Pager {
 
     public static void init(Path path, int heapSize, int pageSize) throws IOException {
         if (!Files.exists(path)) {
-            Files.createDirectory(path);
+            Files.createDirectories(path);
         }
         Preconditions.checkArgument(heapSize > 0);
         Preconditions.checkArgument(pageSize > 0);

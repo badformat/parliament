@@ -58,7 +58,7 @@ class PaxosServerTest {
                         .me(address)
                         .paxos(paxos)
                         .build();
-            } catch (IOException e) {
+            } catch (IOException | ExecutionException e) {
                 fail(e);
                 return null;
             }
@@ -137,7 +137,7 @@ class PaxosServerTest {
         servers.stream().parallel().forEach(server -> {
             try {
                 server.getPaxos().done(round.get());
-            } catch (IOException e) {
+            } catch (IOException | ExecutionException e) {
                 fail(e);
             }
         });
@@ -145,7 +145,7 @@ class PaxosServerTest {
         servers.stream().parallel().forEach(server -> {
             try {
                 server.getPaxos().forget(round.get());
-            } catch (IOException e) {
+            } catch (IOException | ExecutionException e) {
                 fail(e);
             }
             assertEquals(round.get(), server.getPaxos().done());

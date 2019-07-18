@@ -60,7 +60,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
                   @NonNull Sequence<String> sequence,
                   @NonNull Persistence persistence,
                   @NonNull PeerAcceptors peerAcceptors,
-                  @NonNull InetLeaner learner) throws IOException {
+                  @NonNull InetLeaner learner) throws IOException, ExecutionException {
         this.executorService = executorService;
         this.sequence = sequence;
         this.persistence = persistence;
@@ -112,7 +112,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
-    public void instance(int round, byte[] content) throws IOException {
+    public void instance(int round, byte[] content) throws IOException, ExecutionException {
         byte[] r = get(round);
         if (r != null) {
             Preconditions.checkState(Arrays.equals(r, content));
@@ -125,13 +125,13 @@ public class Paxos implements Coordinator, LocalAcceptors {
         return min;
     }
 
-    void min(int m) throws IOException {
+    void min(int m) throws IOException, ExecutionException {
         this.min = m;
         persistence.put("min".getBytes(), ByteBuffer.allocate(4).putInt(m).array());
     }
 
     @Override
-    public void learn(int round) throws IOException {
+    public void learn(int round) throws IOException, ExecutionException {
         byte[] content = learner.instance(round).orElse(null);
         if (content == null) {
             return;
@@ -145,7 +145,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
-    public void done(int d) throws IOException {
+    public void done(int d) throws IOException, ExecutionException {
         this.done = d;
         persistence.put("done".getBytes(), ByteBuffer.allocate(4).putInt(d).array());
     }
@@ -156,13 +156,13 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
-    public void max(int m) throws IOException {
+    public void max(int m) throws IOException, ExecutionException {
         max = m;
         persistence.put("max".getBytes(), ByteBuffer.allocate(4).putInt(max).array());
     }
 
     @Override
-    public void forget(int before) throws IOException {
+    public void forget(int before) throws IOException, ExecutionException {
         synchronized (this) {
             if (before > done) {
                 return;
@@ -179,7 +179,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
             }
             int m = Math.max(0, min());
             do {
-                persistence.remove(ByteBuffer.allocate(4).putInt(cursor).array());
+                persistence.del(ByteBuffer.allocate(4).putInt(cursor).array());
                 cursor--;
             } while (cursor >= 0 && cursor > m);
             min(min1);
@@ -236,7 +236,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
         });
     }
 
-    private void checkAndPut(int round, byte[] agreement) throws IOException {
+    private void checkAndPut(int round, byte[] agreement) throws IOException, ExecutionException {
         Preconditions.checkNotNull(agreement);
         byte[] r = get(round);
         if (r != null) {
@@ -249,13 +249,13 @@ public class Paxos implements Coordinator, LocalAcceptors {
     public byte[] get(int round) {
         try {
             return persistence.get(ByteBuffer.allocate(4).putInt(round).array());
-        } catch (IOException e) {
+        } catch (IOException | ExecutionException e) {
             logger.warn("io exception.", e);
             return null;
         }
     }
 
-    void put(int round, byte[] agreement) throws IOException {
+    void put(int round, byte[] agreement) throws IOException, ExecutionException {
         persistence.put(ByteBuffer.allocate(4).putInt(round).array(), agreement);
     }
 }

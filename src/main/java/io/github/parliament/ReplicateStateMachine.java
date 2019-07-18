@@ -62,7 +62,7 @@ public class ReplicateStateMachine {
         this.coordinator = coordinator;
     }
 
-    public void start(StateTransfer transfer, Executor executor) throws IOException {
+    public void start(StateTransfer transfer, Executor executor) throws IOException, ExecutionException {
         this.stateTransfer = transfer;
         Integer d = getRedoLog();
         if (d != null) {
@@ -123,7 +123,7 @@ public class ReplicateStateMachine {
         return transforms.get(input.getId());
     }
 
-    void apply() throws IOException {
+    void apply() throws IOException, ExecutionException {
         int id = done() + 1;
         Future<byte[]> inputFuture = null;
         Input input = null;
@@ -161,7 +161,7 @@ public class ReplicateStateMachine {
         }
     }
 
-    private void forget() throws IOException {
+    private void forget() throws IOException, ExecutionException {
         threshold++;
         if (threshold > 100) {
             threshold = 0;
@@ -169,7 +169,7 @@ public class ReplicateStateMachine {
         }
     }
 
-    private void keepUp() throws IOException {
+    private void keepUp() throws IOException, ExecutionException {
         int begin = done() + 1;
         Preconditions.checkState(begin >= 0);
         int end = coordinator.max();
@@ -191,12 +191,12 @@ public class ReplicateStateMachine {
         return done;
     }
 
-    private void done(int d) throws IOException {
+    private void done(int d) throws IOException, ExecutionException {
         persistence.put(RSM_DONE, ByteBuffer.allocate(4).putInt(d).array());
         done = d;
     }
 
-    public void forget(int before) throws IOException {
+    public void forget(int before) throws IOException, ExecutionException {
         Preconditions.checkState(before <= done());
         coordinator.forget(before);
     }
@@ -213,7 +213,7 @@ public class ReplicateStateMachine {
         return sequence.current();
     }
 
-    private Integer getRedoLog() throws IOException {
+    private Integer getRedoLog() throws IOException, ExecutionException {
         try {
             byte[] bytes = persistence.get(RSM_DONE_REDO);
             if (bytes == null) {
@@ -226,11 +226,11 @@ public class ReplicateStateMachine {
         return null;
     }
 
-    private void removeRedoLog() throws IOException {
-        persistence.remove(RSM_DONE_REDO);
+    private void removeRedoLog() throws IOException, ExecutionException {
+        persistence.del(RSM_DONE_REDO);
     }
 
-    private void writeRedoLog(int id) throws IOException {
+    private void writeRedoLog(int id) throws IOException, ExecutionException {
         persistence.put(RSM_DONE_REDO, ByteBuffer.allocate(4).putInt(id).array());
     }
 
