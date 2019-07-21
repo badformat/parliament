@@ -395,7 +395,9 @@ public class SkipList implements Persistence {
                 d = true;
             }
             SkipListPage superPage = current.getSuperPage();
-            superPage.del(key);
+            if(superPage != null) {
+                superPage.del(key);
+            }
             return d;
         } finally {
             readWriteLock.writeLock().unlock();
