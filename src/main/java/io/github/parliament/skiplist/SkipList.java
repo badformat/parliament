@@ -388,14 +388,15 @@ public class SkipList implements Persistence {
 
     public boolean del(byte[] key) throws IOException, ExecutionException {
         try {
+            boolean d = false;
             readWriteLock.writeLock().lock();
             SkipListPage current = findLeafSkipListPageOfKey(key);
-            current.del(key);
-            SkipListPage superPage = current.getSuperPage();
-            if (superPage != null) {
-                return superPage.del(key);
+            if (current.del(key)) {
+                d = true;
             }
-            return false;
+            SkipListPage superPage = current.getSuperPage();
+            superPage.del(key);
+            return d;
         } finally {
             readWriteLock.writeLock().unlock();
         }

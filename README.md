@@ -56,9 +56,10 @@ java -Dkv="127.0.0.1:7001" -Dme="127.0.0.1:8002" -Dpeers="127.0.0.1:8000,127.0.0
 redis-cli 127.0.0.1:7001
 ```
 
-目前实现了get\put\del命令：
+目前实现了get\put\del\range命令：
 ```
 put a A
 get a
 del a
+range a z
 ```
