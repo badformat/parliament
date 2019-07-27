@@ -1,7 +1,10 @@
 package io.github.parliament.skiplist;
 
 import com.google.common.base.Preconditions;
-import com.google.common.cache.*;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalListener;
 import io.github.parliament.Persistence;
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
@@ -16,7 +19,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
@@ -370,6 +376,9 @@ public class SkipList implements Persistence {
             SkipListPage current = findLeafSkipListPageOfKey(min);
             List<byte[]> r = new ArrayList<>();
             while (current != null) {
+                if (current.getMap().isEmpty()) {
+                    return r;
+                }
                 if (Arrays.compare(max, current.getMap().firstKey()) < 0) {
                     return r;
                 }
@@ -395,7 +404,7 @@ public class SkipList implements Persistence {
                 d = true;
             }
             SkipListPage superPage = current.getSuperPage();
-            if(superPage != null) {
+            if (superPage != null) {
                 superPage.del(key);
             }
             return d;
