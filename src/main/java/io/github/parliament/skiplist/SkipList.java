@@ -365,11 +365,17 @@ public class SkipList implements Persistence {
     }
 
     public List<byte[]> range(byte[] min, byte[] max) throws IOException, ExecutionException {
+        if (Arrays.compare(min, max) >= 0) {
+            return Collections.emptyList();
+        }
         try {
             readWriteLock.readLock().lock();
             SkipListPage current = findLeafSkipListPageOfKey(min);
             List<byte[]> r = new ArrayList<>();
             while (current != null) {
+                if (current.getMap().isEmpty()) {
+                    return r;
+                }
                 if (Arrays.compare(max, current.getMap().firstKey()) < 0) {
                     return r;
                 }
@@ -395,7 +401,9 @@ public class SkipList implements Persistence {
                 d = true;
             }
             SkipListPage superPage = current.getSuperPage();
-            superPage.del(key);
+            if (superPage != null) {
+                superPage.del(key);
+            }
             return d;
         } finally {
             readWriteLock.writeLock().unlock();

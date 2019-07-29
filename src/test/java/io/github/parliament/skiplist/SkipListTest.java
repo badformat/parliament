@@ -200,6 +200,19 @@ class SkipListTest {
     }
 
     @Test
+    void rangeIllegalMinMax() throws IOException, ExecutionException {
+        byte[] min = "9".getBytes();
+        byte[] max = "0".getBytes();
+        skipList.put(min, min);
+        assertTrue(skipList.range(min, max).isEmpty());
+    }
+
+    @Test
+    void rangeEmpty() throws IOException, ExecutionException {
+        skipList.range("0".getBytes(), "9".getBytes());
+    }
+
+    @Test
     void del() throws IOException, ExecutionException {
         int limit = 9;
         for (int i = 0; i < limit; i++) {
