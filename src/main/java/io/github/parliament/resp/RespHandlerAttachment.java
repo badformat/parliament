@@ -5,17 +5,27 @@ import lombok.Getter;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 
+/**
+ * 客户连接channel上挂载的附件对象，包含read handler和write handler。
+ * @author zy
+ */
 public class RespHandlerAttachment {
+    // 读写缓冲区
     @Getter
     private volatile ByteBuffer byteBuffer;
+    // 相关socket channel
     @Getter
     private volatile AsynchronousSocketChannel channel;
+    // resp协议decoder
     @Getter
     private volatile RespDecoder respDecoder;
+    // 超时设置
     @Getter
     private int timeOutMills = 3000;
+    // channel read handler
     @Getter
     private RespReadHandler respReadHandler;
+    // channel write handler
     @Getter
     private RespWriteHandler respWriteHandler;
 

@@ -29,8 +29,6 @@ public abstract class RespReadHandler implements CompletionHandler<Integer, Resp
             RespArray request = decoder.get();
             if (request != null) {
                 response = process(attachment, request);
-            } else {
-                return;
             }
         } catch (Exception e) {
             logger.error("read handler exception in completed().", e);

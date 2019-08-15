@@ -23,14 +23,16 @@ import java.util.concurrent.Future;
 
 /**
  * <p>
+ * 
  * 可以使用不同一致性协议的kv服务，支持并发执行。
  * 目前使用pager完成持久化功能。
  * LRU缓存相关page实现本地持久化数据的高速缓存。
  * 使用redis resp协议完成交互。
  * 返回future，方便网络服务决定超时。
  * 提供相关任务（如一致性协议）的线程池，以便控制线程资源消耗。
- * <p>
+ * 
  * 实现RSM接口，与一致性协议协调完成RSM功能。
+ * </p>
  * RSM用例：
  * <ul>
  * <li>当其他节点的一个共识达成时，可收到通知并执行。</li>
@@ -38,7 +40,7 @@ import java.util.concurrent.Future;
  * <li>定时自动删除所有节点都已执行成功的共识。</li>
  * </ul>
  *
- * </p>
+ * 
  *
  * @author zy
  */

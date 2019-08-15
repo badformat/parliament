@@ -89,7 +89,7 @@ public class Application {
 
         KeyValueServer server = KeyValueServer.builder().socketAddress(kv).keyValueEngine(keyValueEngine).build();
         server.start();
-        logger.info("本地kv服务启动成功，地址：" + kv);
+        logger.info("本地kv服务启动成功，地址：{0}", kv);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("服务进程退出.");
             try {

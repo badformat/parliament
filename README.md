@@ -20,15 +20,12 @@
 
 详情见编写中的文档：[如何从头实现一个分布式key-vaule服务](https://z42y.github.io/parliament/)。
 
-# 进展
-## DONE
+# 功能
+
 - redis二进制协议resp解析器。
 - 基于redis协议的kv服务器。
 - kv服务器之间使用的paxos共识服务。
-- 基本的持久化存储服务。
-
-## TODO
-- 基于btree的持久化服务。
+- 基本skiplist的持久化存储服务。
 
 # 构建
 - maven
@@ -36,10 +33,7 @@
 
 如果你要使用IDE查看代码，请安装lombok相关[插件](https://projectlombok.org/setup/overview)。
 
-# 使用举例
-目前已经可以简单测试使用，但是持久化实现还未完成。
-
-## 例子
+# 运行
 在target编译目录下，启动服务器1：
 
 ```

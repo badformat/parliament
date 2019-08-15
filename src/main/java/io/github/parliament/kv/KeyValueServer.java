@@ -22,14 +22,20 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 使用java nio监听指定端口，使用{@link io.github.parliament.resp.RespReadHandler}完成redis resp协议解析后，
+ * 使用{@link KeyValueEngine}处理，再使用{@link RespWriteHandler}返回响应。
  * @author zy
  */
 public class KeyValueServer {
     private static final Logger logger = LoggerFactory.getLogger(KeyValueServer.class);
+    // 服务地址
     @Getter(AccessLevel.PACKAGE)
     private InetSocketAddress socketAddress;
+    // 服务socket channel
     private AsynchronousServerSocketChannel serverSocketChannel;
+    // 处理线程池，读者问题：accept是否会使用该线程池处理连接请求？不能的原因是什么？
     private AsynchronousChannelGroup channelGroup;
+    // kv处理引擎
     private KeyValueEngine engine;
 
     @Builder
@@ -39,6 +45,10 @@ public class KeyValueServer {
         this.engine = keyValueEngine;
     }
 
+    /**
+     * 启动服务
+     * @throws Exception 异常
+     */
     public void start() throws Exception {
         engine.start();
         RespReadHandler respReadHandler = new RespReadHandler() {
@@ -76,6 +86,10 @@ public class KeyValueServer {
         });
     }
 
+    /**
+     * 关闭服务
+     * @throws IOException 关闭异常
+     */
     public void shutdown() throws IOException {
         channelGroup.shutdown();
         serverSocketChannel.close();
