@@ -5,6 +5,10 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.channels.CompletionHandler;
 
+/**
+ * 将响应中的buffer数据全部返回给客户端。
+ * @author zy
+ */
 public class RespWriteHandler implements CompletionHandler<Integer, RespHandlerAttachment> {
     private static final Logger logger = LoggerFactory.getLogger(RespWriteHandler.class);
 

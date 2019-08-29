@@ -10,7 +10,7 @@ import java.util.List;
 import com.google.common.base.Preconditions;
 
 /**
- *
+ * RESP协议解码器，使用自定义的{@link  ByteBuf}处理数据。
  * @author zy
  */
 public class RespDecoder {

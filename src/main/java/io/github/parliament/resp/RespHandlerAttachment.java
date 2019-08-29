@@ -6,7 +6,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 
 /**
- * 客户连接channel上挂载的附件对象，包含read handler和write handler。
+ * 客户连接channel上挂载的附件对象，包含{@link RespReadHandler read handler}和{@link RespWriteHandler write handler}。
+ * 使用{@link RespDecoder}解码。
  * @author zy
  */
 public class RespHandlerAttachment {

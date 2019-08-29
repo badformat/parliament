@@ -8,6 +8,8 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 
 /**
+ * 处理客户请求，生成response以后使用{@link  RespWriteHandler writer}返回给客户端。
+ * 大的response可以优化process为异步模式，但是没有必要这么复杂。
  * @author zy
  */
 public abstract class RespReadHandler implements CompletionHandler<Integer, RespHandlerAttachment> {
