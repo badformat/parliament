@@ -33,7 +33,7 @@ public class KeyValueServer {
     private InetSocketAddress socketAddress;
     // 服务socket channel
     private AsynchronousServerSocketChannel serverSocketChannel;
-    // 处理线程池，读者问题：accept是否会使用该线程池处理连接请求？不能的原因是什么？
+    // 处理线程池，问题：accept是否会使用该线程池处理连接请求？不能的原因是什么？
     private AsynchronousChannelGroup channelGroup;
     // kv处理引擎
     private KeyValueEngine engine;
@@ -59,12 +59,7 @@ public class KeyValueServer {
                         .toByteBuffer();
             }
         };
-        RespWriteHandler respWriteHandler = new RespWriteHandler() {
-            @Override
-            protected void process(RespHandlerAttachment attachment) {
-
-            }
-        };
+        RespWriteHandler respWriteHandler = new RespWriteHandler();
         channelGroup = AsynchronousChannelGroup.withFixedThreadPool(20, Executors.defaultThreadFactory());
         serverSocketChannel = AsynchronousServerSocketChannel.open(channelGroup);
         serverSocketChannel.bind(socketAddress);

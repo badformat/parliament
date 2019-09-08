@@ -7,6 +7,7 @@ import java.nio.channels.CompletionHandler;
 
 /**
  * 将响应中的buffer数据全部返回给客户端。
+ *
  * @author zy
  */
 public class RespWriteHandler implements CompletionHandler<Integer, RespHandlerAttachment> {
@@ -17,22 +18,14 @@ public class RespWriteHandler implements CompletionHandler<Integer, RespHandlerA
         if (attachment.getByteBuffer().hasRemaining()) {
             attachment.getChannel().write(attachment.getByteBuffer(), attachment, this);
         } else {
-            try {
-                process(attachment);
-            } finally {
-                RespHandlerAttachment readAttachment = new RespHandlerAttachment(attachment);
-                attachment.getChannel().read(readAttachment.getByteBuffer(), readAttachment,
-                        readAttachment.getRespReadHandler());
-            }
+            RespHandlerAttachment readAttachment = new RespHandlerAttachment(attachment);
+            attachment.getChannel().read(readAttachment.getByteBuffer(), readAttachment,
+                    readAttachment.getRespReadHandler());
         }
     }
 
     @Override
     public void failed(Throwable exc, RespHandlerAttachment attachment) {
         logger.error("write handler failed.", exc);
-    }
-
-    protected void process(RespHandlerAttachment attachment) {
-
     }
 }
