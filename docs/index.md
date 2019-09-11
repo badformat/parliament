@@ -32,18 +32,18 @@
 首先使用NIO接收客户连接，在连接成功的channel上挂载一个[RespReadHandler](./javadoc/io/github/parliament/resp/RespReadHandler.html)类，
 使用[RespDecoder](./javadoc/io/github/parliament/resp/RespDecoder.html)类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断是否解码完成。
 
-解码完成后，使用[KeyValueEngine](./javadoc/io/github/parliament/kv/class-use/KeyValueEngine.html)进行真正的缓存读写处理，
+解码完成后，使用[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)进行真正的缓存读写处理，
 
 处理完成后，新建一个[RespWriteHandler](./javadoc/io/github/parliament/resp/RespWriteHandler.html)将结果返回给客户端，
 接着重新挂载一个RespReadHandler进行下一个请求处理。
 
 重新生成RespWriterHandler和RespReadHandler是为了方便进行GC，当然可以手工管理各种buffer的回收和重利用，这里不做详细设计了。
 
-因为缓存的对象都比较小，[KeyValueEngine](./javadoc/io/github/parliament/kv/class-use/KeyValueEngine.html)并没有使用InputStream之类的模式进一步提升异步性能。
+因为缓存的对象都比较小，[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)并没有使用InputStream之类的模式进一步提升异步性能。
 
 ## 网络协议的解析构造
 [RespDecoder](./javadoc/io/github/parliament/resp/RespDecoder.html)是redis的[RESP协议](https://redis.io/topics/protocol)解码器，
-RESP一共有四种数据类型：
+RESP一共有以下几种数据类型：
 - SIMPLE_STRING 字符串
 - ERROR 错误字符串
 - INTEGER 整数
@@ -61,7 +61,7 @@ RESP一共有四种数据类型：
 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短、数据量都小，无法体现其优势。
 
 # 解决一致性问题
-前面说到服务需要保证线性一致，如果[KeyValueEngine](./javadoc/io/github/parliament/kv/class-use/KeyValueEngine.html)直接对key-value进行读写，将会导致不一致的问题。
+前面说到服务需要保证线性一致，如果[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)直接对key-value进行读写，将会导致不一致的问题。
 
 举个简单的例子：
 
@@ -156,17 +156,17 @@ RESP一共有四种数据类型：
 得到paxos算法过程如下：
 
 - prepare阶段：
- - 发起者选择一个提案编号n并将prepare请求发送给接收者中的一个多数派；
- - 接收者收到prepare消息后，如果提案的编号大于它已经回复的所有prepare消息(回复消息表示接受accept)，
+    - 发起者选择一个提案编号n并将prepare请求发送给接收者中的一个多数派；
+    - 接收者收到prepare消息后，如果提案的编号大于它已经回复的所有prepare消息(回复消息表示接受accept)，
 则接收者将自己上次接受的提案回复给发起者，并承诺不再回复小于n的提案；如果没有回复过prepare消息，也承诺不再回复小于n的提案。
 - 批准阶段：
- - 当一个发起者收到了多数接收者对prepare的回复后，就进入批准阶段。
+    - 当一个发起者收到了多数接收者对prepare的回复后，就进入批准阶段。
  它要向回复prepare请求的接收者发送accept请求，包括编号n和prepare阶段返回的小于n的最大提案的值。
- - 如果accept的提案编号n大于等于接收者已承诺的编号值，接收者就批准这个请求。
- - accept被多数派批准后，发起者再通知所有接收者提案已批准（decided)的消息。
+    - 如果accept的提案编号n大于等于接收者已承诺的编号值，接收者就批准这个请求。
+    - accept被多数派批准后，发起者再通知所有接收者提案已批准（decided)的消息。
  
 # 实现复制状态机
-[KeyValueEngine](./javadoc/io/github/parliament/kv/class-use/KeyValueEngine.html)收到请求，不会立即执行，
+[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)收到请求，不会立即执行，
 而是交给[ReplicateStateMachine](./javadoc/io/github/parliament/ReplicateStateMachine.html)生成一个新的状态机输入，
 并委托ReplicateStateMachine对该输入所在编号的操作达成共识，由ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。
 
@@ -260,11 +260,11 @@ Coordinator可以由各种共识算法实现。
 各个实例的提案请求可能来自其他节点，所以提供一个网络服务[PaxosServer](./javadoc/io/github/parliament/paxos/server/PaxosServer.html)，
 通过参数中的编号区分不同共识过程实例，转发给不同实例的本地接收者处理，然后返回响应。
 
-配套的，提供[SyncProxyAcceptor](./javadoc/io/github/parliament/paxos/client/class-use/SyncProxyAcceptor.html)作为远端接收者的本地网络代理，
+配套的，提供[SyncProxyAcceptor](./javadoc/io/github/parliament/paxos/client/SyncProxyAcceptor.html)作为远端接收者的本地网络代理，
 请求各个PaxosServer完成提案过程。
 
-[InetPeerAcceptors](./javadoc/io/github/parliament/paxos/client/class-use/InetPeerAcceptors.html)为SyncProxyAceptor的创建工厂，
-使用一个简单的[连接池](./javadoc/io/github/parliament/paxos/client/class-use/ConnectionPool.html)为SyncProxyAcceptor提供nio channel实例。
+[InetPeerAcceptors](./javadoc/io/github/parliament/paxos/client/InetPeerAcceptors.html)为SyncProxyAceptor的创建工厂，
+使用一个简单的[连接池](./javadoc/io/github/parliament/paxos/client/ConnectionPool.html)为SyncProxyAcceptor提供nio channel实例。
 
 接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。
 如prepare方法的代理：
@@ -297,6 +297,36 @@ public synchronized Prepare prepare(String n) throws Exception {
         return Prepare.ok(n, na, va);
     }
     return Prepare.reject(n);
+}
+```
+[Paxos类](./javadoc/io/github/parliament/paxos/Paxos.html)保存和恢复acceptor的方法分别如下：
+```
+private void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
+    if (Strings.isNullOrEmpty(acceptor.getNp())) {
+        return;
+    }
+    persistence.put((round + "np").getBytes(), acceptor.getNp().getBytes());
+    if (!Strings.isNullOrEmpty(acceptor.getNa())) {
+        persistence.put((round + "na").getBytes(), acceptor.getNa().getBytes());
+    }
+    if (acceptor.getVa() != null) {
+        persistence.put((round + "va").getBytes(), acceptor.getVa());
+    }
+}
+
+private Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
+    byte[] np = persistence.get((round + "np").getBytes());
+
+    if (np == null) {
+        return Optional.empty();
+    }
+    byte[] na = persistence.get((round + "na").getBytes());
+    byte[] va = persistence.get((round + "va").getBytes());
+
+    String nps = new String(np);
+    String nas = na == null ? null : new String(na);
+
+    return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
 }
 ```
 
