@@ -29,11 +29,6 @@ class MockPaxos implements Coordinator {
     }
 
     @Override
-    public void instance(int round, byte[] content) {
-        states.put(round, content);
-    }
-
-    @Override
     public int min() {
         return 0;
     }

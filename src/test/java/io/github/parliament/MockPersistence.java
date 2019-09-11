@@ -30,4 +30,8 @@ public class MockPersistence implements Persistence {
         }
         return l;
     }
+
+    public void clear() {
+        map.clear();;
+    }
 }

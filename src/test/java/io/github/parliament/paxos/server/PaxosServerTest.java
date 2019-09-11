@@ -4,7 +4,7 @@ import io.github.parliament.MockPersistence;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.ConnectionPool;
-import io.github.parliament.paxos.client.InetLeaner;
+import io.github.parliament.paxos.client.InetLearner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,7 +45,7 @@ class PaxosServerTest {
                 peers.remove(address);
                 InetPeerAcceptors acceptors = InetPeerAcceptors.builder().connectionPool(pool).peers(peers).build();
                 ExecutorService executorService = Executors.newCachedThreadPool();
-                InetLeaner leaner = InetLeaner.create(pool, peers);
+                InetLearner leaner = InetLearner.create(pool, peers);
                 Paxos paxos = Paxos.builder()
                         .peerAcceptors(acceptors)
                         .learner(leaner)
@@ -81,7 +81,7 @@ class PaxosServerTest {
     }
 
     @Test
-    void coordinate() throws InterruptedException, ExecutionException, TimeoutException {
+    void coordinate() throws InterruptedException, ExecutionException, IOException {
         int i = round.getAndIncrement();
         me.coordinate(i, content);
         assertArrayEquals(content, me.instance(i).get());
@@ -97,7 +97,7 @@ class PaxosServerTest {
             try {
                 byte[] c = ("content" + r).getBytes();
                 me.coordinate(r, c);
-            } catch (ExecutionException e) {
+            } catch (ExecutionException | IOException e) {
                 fail("failed at " + r, e);
             }
         });
@@ -107,7 +107,7 @@ class PaxosServerTest {
                 byte[] actual = me.instance(r).get(3, TimeUnit.SECONDS);
                 assertArrayEquals(("content" + r).getBytes(), actual,
                         "actual: " + new String(actual) + ",expected:content" + r);
-            } catch (InterruptedException | TimeoutException | ExecutionException e) {
+            } catch (InterruptedException | TimeoutException | ExecutionException | IOException e) {
                 fail(e);
             }
         });
@@ -125,7 +125,7 @@ class PaxosServerTest {
                     assertArrayEquals(value, ("other content" + i).getBytes(), "fail at " + i + ".content:" +
                             new String(value));
                 }
-            } catch (ExecutionException | InterruptedException e) {
+            } catch (ExecutionException | InterruptedException | IOException e) {
                 fail(e);
             }
         });

@@ -1,10 +1,11 @@
 package io.github.parliament.paxos;
 
+import com.google.common.base.Strings;
 import io.github.parliament.MockPersistence;
 import io.github.parliament.Persistence;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.LocalAcceptor;
-import io.github.parliament.paxos.client.InetLeaner;
+import io.github.parliament.paxos.client.InetLearner;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ class PaxosTest {
     private byte[] value = "content".getBytes();
     private Persistence persistence = new MockPersistence();
     private PeerAcceptors peerAcceptors;
-    private InetLeaner leaner;
+    private InetLearner leaner;
 
     @BeforeEach
     void setUp() throws IOException, ExecutionException {
@@ -34,12 +35,23 @@ class PaxosTest {
             public void decide(byte[] agreement) {
 
             }
+
+            @Override
+            public void persistence() throws IOException, ExecutionException {
+                persistence.put((round + "np").getBytes(), getNp().getBytes());
+                if (!Strings.isNullOrEmpty(getNa())) {
+                    persistence.put((round + "na").getBytes(), getNa().getBytes());
+                }
+                if (getVa() != null) {
+                    persistence.put((round + "va").getBytes(), getVa());
+                }
+            }
         });
         peerAcceptors = mock(PeerAcceptors.class);
         when(peerAcceptors.create(anyInt())).thenAnswer((ctx) -> acceptors);
         doNothing().when(peerAcceptors).release(anyInt());
 
-        leaner = mock(InetLeaner.class);
+        leaner = mock(InetLearner.class);
         paxos = Paxos.builder()
                 .executorService(Executors.newFixedThreadPool(10))
                 .sequence(new TimestampSequence())
@@ -50,7 +62,7 @@ class PaxosTest {
     }
 
     @Test
-    void coordinate() throws InterruptedException, ExecutionException, TimeoutException {
+    void coordinate() throws InterruptedException, ExecutionException, TimeoutException, IOException {
         paxos.coordinate(1, value);
         Future<byte[]> future = paxos.instance(1);
         assertNotNull(future);
@@ -58,12 +70,12 @@ class PaxosTest {
     }
 
     @Test
-    void asyncInstance() throws InterruptedException, ExecutionException {
+    void asyncInstance() throws InterruptedException, ExecutionException, IOException {
         Future<byte[]> future = paxos.instance(10);
         new Thread(() -> {
             try {
                 paxos.coordinate(10, value);
-            } catch (ExecutionException e) {
+            } catch (ExecutionException | IOException e) {
                 fail(e);
             }
         }).start();
@@ -73,7 +85,7 @@ class PaxosTest {
 
     @Test
     void instanceOfDone() throws IOException, InterruptedException, ExecutionException, TimeoutException {
-        persistence.put(ByteBuffer.allocate(4).putInt(1).array(), value);
+        persistence.put((1 + "agreement").getBytes(), value);
         assertArrayEquals(value, paxos.instance(1).get(1, TimeUnit.SECONDS));
     }
 

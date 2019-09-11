@@ -6,7 +6,7 @@ import io.github.parliament.page.Pager;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.ConnectionPool;
-import io.github.parliament.paxos.client.InetLeaner;
+import io.github.parliament.paxos.client.InetLearner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import io.github.parliament.paxos.server.PaxosServer;
@@ -45,7 +45,7 @@ public class Application {
         @NonNull ExecutorService executorService = Executors.newFixedThreadPool(200);
         @NonNull ConnectionPool connectionPool = ConnectionPool.create(500);
         @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).connectionPool(connectionPool).build();
-        @NonNull InetLeaner leaner = InetLeaner.create(connectionPool, peers);
+        @NonNull InetLearner leaner = InetLearner.create(connectionPool, peers);
 
         Path rsmPath = Paths.get(dir).resolve("rsm");
         Pager.init(rsmPath, Pager.MAX_HEAP_SIZE, 64 * 1024);

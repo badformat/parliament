@@ -16,7 +16,7 @@ parliament是一个带持久化的分布式缓存服务器，基于JDK 9+。
 在编译结果目录（target）下，启动端口为7000的服务器1：
 
 ```
-java -Dkv="127.0.0.1:7000" -Dme="127.0.0.1:8000" -Dpeers="127.0.0.1:8000,127.0.0.1:8001" -Ddir="./db7000" -cp .\dependencies\ -jar .\parliament-1.0-SNAPSHOT.jar
+java -Dkv="127.0.0.1:7000" -Dme="127.0.0.1:8000" -Dpeers="127.0.0.1:8000,127.0.0.1:8001" -Ddir="./db7000" -cp ./dependencies -jar ./parliament-1.0-SNAPSHOT.jar
 ```
 参数说明：
 - kv：缓存服务进程的端口，供redis客户端连接。
@@ -28,12 +28,12 @@ java -Dkv="127.0.0.1:7000" -Dme="127.0.0.1:8000" -Dpeers="127.0.0.1:8000,127.0.0
 
 接着启动7001端口的服务器2，其Paxos共识参与者端口为8001:
 ```
-java -Dkv="127.0.0.1:7001" -Dme="127.0.0.1:8001" -Dpeers="127.0.0.1:8000,127.0.0.1:8001" -Ddir="./db70001" -cp .\dependencies\ -jar .\parliament-1.0-SNAPSHOT.jar
+java -Dkv="127.0.0.1:7001" -Dme="127.0.0.1:8001" -Dpeers="127.0.0.1:8000,127.0.0.1:8001" -Ddir="./db70001" -cp ./dependencies -jar ./parliament-1.0-SNAPSHOT.jar
 ```
 
 使用redis-cli客户端，连接以上某个服务:
 ```
-redis-cli 127.0.0.1:7001
+redis-cli -h 127.0.0.1 -p 7001
 ```
 
 目前实现了get\put\del\range（按key的范围查询列表）命令：

@@ -152,7 +152,6 @@ public class ReplicateStateMachine {
             try {
                 Output output = stateTransfer.transform(input);
                 transform.complete(output);
-                logger.debug("complete input: {}", input);
             } catch (Exception e) {
                 logger.error("Exception thrown by eventProcess.transform for instance {}",
                         input.getId(), e);

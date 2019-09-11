@@ -15,12 +15,10 @@ import java.util.concurrent.Future;
  * @author zy
  **/
 public interface Coordinator {
-    void coordinate(int id, byte[] content) throws ExecutionException;
+    void coordinate(int id, byte[] content) throws ExecutionException, IOException;
 
-    Future<byte[]> instance(int id) throws ExecutionException;
-
-    void instance(int id, byte[] content) throws IOException, ExecutionException;
-
+    Future<byte[]> instance(int id) throws ExecutionException, IOException;
+    
     int min();
 
     int done() throws IOException;
@@ -33,7 +31,7 @@ public interface Coordinator {
 
     void forget(int before) throws IOException, ExecutionException;
 
-    byte[] get(int id);
+    byte[] get(int id) throws IOException, ExecutionException;
 
     void learn(int id) throws IOException, ExecutionException;
 }

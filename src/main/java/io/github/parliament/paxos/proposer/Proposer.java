@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 public class Proposer {
     private static final Logger logger = LoggerFactory.getLogger(Proposer.class);
     private List<? extends Acceptor> acceptors;
-    private int quorum = Integer.MAX_VALUE;
+    private int quorum;
     private Sequence<String> sequence;
     private boolean decided = false;
     private String n;

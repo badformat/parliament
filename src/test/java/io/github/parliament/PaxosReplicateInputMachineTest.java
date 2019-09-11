@@ -3,14 +3,11 @@ package io.github.parliament;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.ConnectionPool;
-import io.github.parliament.paxos.client.InetLeaner;
+import io.github.parliament.paxos.client.InetLearner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.server.PaxosServer;
 import lombok.NonNull;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -51,7 +48,7 @@ class PaxosReplicateInputMachineTest {
                 peers.remove(me);
                 InetPeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).connectionPool(pool).build();
                 ExecutorService executorService = Executors.newCachedThreadPool();
-                @NonNull InetLeaner learner = InetLeaner.create(pool, peers);
+                @NonNull InetLearner learner = InetLearner.create(pool, peers);
                 Paxos paxos = Paxos.builder()
                         .peerAcceptors(acceptors)
                         .learner(learner)
@@ -141,7 +138,7 @@ class PaxosReplicateInputMachineTest {
             try {
                 Output output1 = f.get(3, TimeUnit.SECONDS);
                 Output output2 = other.getTransforms().get(output1.getId()).get(3, TimeUnit.SECONDS);
-                assertEquals(output1, output2);
+                assertEquals(new String(output1.getContent()), new String(output2.getContent()));
                 return 0;
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 return 1;
