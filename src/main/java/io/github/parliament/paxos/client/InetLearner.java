@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public class InetLearner {
@@ -46,7 +47,7 @@ public class InetLearner {
         return done.orElse(-1);
     }
 
-    public Optional<byte[]> instance(int id) throws IOException {
+    public Optional<byte[]> learn(int id) {
         Optional<Optional<byte[]>> instance = peers.stream().map(peer -> {
             SocketChannel channel = null;
             boolean failed = false;
@@ -67,7 +68,7 @@ public class InetLearner {
                     connectionPool.releaseChannel(peer, channel, failed);
                 }
             }
-        }).filter(bytes -> bytes != null).findFirst();
+        }).filter(Objects::nonNull).findFirst();
 
         return instance.orElse(Optional.empty());
     }

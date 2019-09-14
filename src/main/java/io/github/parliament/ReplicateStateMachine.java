@@ -139,7 +139,7 @@ public class ReplicateStateMachine {
             logger.error("Exception in coordinator.instance({})", id, e);
             return;
         } catch (TimeoutException e) {
-            keepUp();
+            catchUp();
             return;
         } catch (ClassNotFoundException e) {
             logger.error("deserialize RSM input（id: {}) failed.Can not continue.Server exit.", id,
@@ -172,7 +172,7 @@ public class ReplicateStateMachine {
         }
     }
 
-    private void keepUp() throws IOException, ExecutionException {
+    private void catchUp() throws IOException, ExecutionException {
         int begin = done() + 1;
         Preconditions.checkState(begin >= 0);
         int end = coordinator.max();

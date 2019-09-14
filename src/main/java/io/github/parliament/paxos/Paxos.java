@@ -6,6 +6,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.MapMaker;
+import com.google.common.primitives.Bytes;
 import io.github.parliament.Coordinator;
 import io.github.parliament.Persistence;
 import io.github.parliament.Sequence;
@@ -25,9 +26,11 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.*;
+import java.util.zip.CRC32;
 
 public class Paxos implements Coordinator, LocalAcceptors {
     private static final Logger logger = LoggerFactory.getLogger(Paxos.class);
@@ -122,11 +125,11 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
     @Override
     public void learn(int round) throws IOException, ExecutionException {
-        byte[] content = learner.instance(round).orElse(null);
+        byte[] content = learner.learn(round).orElse(null);
         if (content == null) {
             return;
         }
-        persistence.put((round + "va").getBytes(), content);
+        persistence.put((round + "agreement").getBytes(), content);
     }
 
     @Override
@@ -169,10 +172,8 @@ public class Paxos implements Coordinator, LocalAcceptors {
             }
             int m = Math.max(0, min());
             do {
-                persistence.del((cursor + "np").getBytes());
-                persistence.del((cursor + "na").getBytes());
-                persistence.del((cursor + "va").getBytes());
-
+                deleteAcceptor(cursor);
+                persistence.del((cursor + "agreement").getBytes());
                 cursor--;
             } while (cursor >= 0 && cursor > m);
             min(min1);
@@ -188,12 +189,12 @@ public class Paxos implements Coordinator, LocalAcceptors {
         return peerAcceptors.create(round);
     }
 
-    private class LocalAcceptorWithPersistence extends LocalAcceptor {
-        protected LocalAcceptorWithPersistence(int round) {
+    class LocalAcceptorWithPersistence extends LocalAcceptor {
+        LocalAcceptorWithPersistence(int round) {
             super(round);
         }
 
-        protected LocalAcceptorWithPersistence(int round, String np, String na, byte[] va) {
+        LocalAcceptorWithPersistence(int round, String np, String na, byte[] va) {
             super(round);
             setNp(np);
             setNa(na);
@@ -216,7 +217,15 @@ public class Paxos implements Coordinator, LocalAcceptors {
         }
     }
 
-    private void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
+    @Override
+    public Acceptor create(int round) throws ExecutionException {
+        return acceptors.get(round, () -> {
+            Optional<LocalAcceptor> optAcceptor = regainAcceptor(round);
+            return optAcceptor.orElse(new LocalAcceptorWithPersistence(round));
+        });
+    }
+
+    void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
         if (Strings.isNullOrEmpty(acceptor.getNp())) {
             return;
         }
@@ -227,9 +236,11 @@ public class Paxos implements Coordinator, LocalAcceptors {
         if (acceptor.getVa() != null) {
             persistence.put((round + "va").getBytes(), acceptor.getVa());
         }
+
+        persistence.put((round + "checksum").getBytes(), checksum(acceptor.getNp(), acceptor.getNa(), acceptor.getVa()));
     }
 
-    private Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
+    Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
         byte[] np = persistence.get((round + "np").getBytes());
 
         if (np == null) {
@@ -241,14 +252,33 @@ public class Paxos implements Coordinator, LocalAcceptors {
         String nps = new String(np);
         String nas = na == null ? null : new String(na);
 
-        return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
+        byte[] checksum1 = checksum(nps, nas, va);
+        byte[] checksum2 = persistence.get((round + "checksum").getBytes());
+        if (Arrays.equals(checksum1, checksum2)) {
+            return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
+        }
+        deleteAcceptor(round);
+        return Optional.empty();
     }
 
-    @Override
-    public Acceptor create(int round) throws ExecutionException {
-        return acceptors.get(round, () -> {
-            Optional<LocalAcceptor> optAcceptor = regainAcceptor(round);
-            return optAcceptor.orElse(new LocalAcceptorWithPersistence(round));
-        });
+    void deleteAcceptor(int round) throws IOException, ExecutionException {
+        persistence.del((round + "np").getBytes());
+        persistence.del((round + "na").getBytes());
+        persistence.del((round + "va").getBytes());
+        persistence.del((round + "checksum").getBytes());
+    }
+
+    private byte[] checksum(String np, String na, byte[] va) {
+        byte[] bytes = null;
+        bytes = Bytes.concat(np.getBytes());
+        if (na != null) {
+            bytes = Bytes.concat(bytes, na.getBytes());
+        }
+        if (va != null) {
+            bytes = Bytes.concat(bytes, va);
+        }
+        CRC32 crc32 = new CRC32();
+        crc32.update(bytes);
+        return ByteBuffer.allocate(8).putLong(crc32.getValue()).array();
     }
 }

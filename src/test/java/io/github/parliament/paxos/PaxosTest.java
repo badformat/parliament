@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -112,5 +113,22 @@ class PaxosTest {
         paxos.done(4);
         assertEquals(4, paxos.done());
         assertEquals(4, ByteBuffer.wrap(persistence.get("done".getBytes())).getInt());
+    }
+
+    @Test
+    void persistenceAcceptor() throws IOException, ExecutionException {
+        Paxos.LocalAcceptorWithPersistence acceptor= paxos.new LocalAcceptorWithPersistence(100, "np", "na", "va".getBytes());
+        paxos.persistenceAcceptor(100, acceptor);
+        Optional<LocalAcceptor> acceptor2 = paxos.regainAcceptor(100);
+        assertTrue(acceptor2.isPresent());
+        assertEquals(acceptor, acceptor2.get());
+    }
+
+    @Test
+    void deleteAcceptor() throws IOException, ExecutionException {
+        Paxos.LocalAcceptorWithPersistence acceptor= paxos.new LocalAcceptorWithPersistence(100, "np", "na", "va".getBytes());
+        paxos.persistenceAcceptor(100, acceptor);
+        paxos.deleteAcceptor(100);
+        assertFalse(paxos.regainAcceptor(100).isPresent());
     }
 }

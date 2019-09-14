@@ -301,7 +301,7 @@ public synchronized Prepare prepare(String n) throws Exception {
 ```
 [Paxos类](./javadoc/io/github/parliament/paxos/Paxos.html)保存和恢复acceptor的方法分别如下：
 ```
-private void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
+void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
     if (Strings.isNullOrEmpty(acceptor.getNp())) {
         return;
     }
@@ -312,9 +312,11 @@ private void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOExc
     if (acceptor.getVa() != null) {
         persistence.put((round + "va").getBytes(), acceptor.getVa());
     }
+
+    persistence.put((round + "checksum").getBytes(), checksum(acceptor.getNp(), acceptor.getNa(), acceptor.getVa()));
 }
 
-private Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
+Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
     byte[] np = persistence.get((round + "np").getBytes());
 
     if (np == null) {
@@ -323,14 +325,22 @@ private Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, Ex
     byte[] na = persistence.get((round + "na").getBytes());
     byte[] va = persistence.get((round + "va").getBytes());
 
+
     String nps = new String(np);
     String nas = na == null ? null : new String(na);
 
-    return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
+    byte[] checksum1 = checksum(nps, nas, va);
+    byte[] checksum2 = persistence.get((round + "checksum").getBytes());
+    if (Arrays.equals(checksum1, checksum2)) {
+        return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
+    }
+    deleteAcceptor(round);
+    return Optional.empty();
 }
 ```
 
-TODO acceptor存储不完整的问题
+持久化过程也可能会失败，所以同时计算保存checksum，在恢复时校验，保证数据完整性。如果checksum不正确，说明该进程在该共识过程中异常退出了，
+对共识结果并无影响，可以安全删除数据，并使用[学习]()过程获得共识结果。
 
 同时，输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](./javadoc/io/github/parliament/ReplicateStateMachine.html#forget())。
 TODO learner
