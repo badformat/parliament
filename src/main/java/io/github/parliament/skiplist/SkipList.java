@@ -27,6 +27,16 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+/**
+ *
+ * ## skip list in page,ascending order
+ *
+ * level > 0:
+ * | meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | next level page no (4 bytes) | key len | key | next level page no | ...
+ *
+ * level 0:
+ * | meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | value len (4 bytes) | value | ...
+ */
 public class SkipList implements Persistence {
     private static final Logger logger = LoggerFactory.getLogger(SkipList.class);
     static final String META_FILE_NAME = "skiplist.mf";

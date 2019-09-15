@@ -14,6 +14,27 @@ import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+/**
+ *
+ * 4g file, 65536个64k
+ *
+ * x个page
+ * x*8 + x*64*1024 = 4*1024*1024*1024
+ * x*65544 = 4294967296
+ * x = 65528.00009764
+ *
+ * heap:
+ *     seq: 2byte
+ * 	heads: head[x]
+ * 	pages: page[x]
+ *
+ * head:
+ * 	page no: 2 byte
+ * 	page location: 4 byte
+ *
+ * | seq(2 byte) | page no (2 byte) | page location (4 byte) | ... | page | page |
+ *
+ */
 public class Pager {
     public static final int MAX_HEAP_SIZE = 1024 * 1024 * 1024;
     public static final String PAGE_SEQ_FILENAME = "page_seq";

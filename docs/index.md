@@ -1,6 +1,6 @@
-# 自制分布式缓存服务：设计及实现
+# 如何实现一个线性一致的分布式缓存
 
-源码及构建、运行方式请参看[github项目主页](https://github.com/z42y/parliament/)和[javadoc参考](./javadoc/index.html)
+源码及构建、运行方式请参看[项目主页](https://github.com/z42y/parliament/)和[javadoc参考](./javadoc/index.html)
 
 # 功能及目标
 
@@ -340,11 +340,40 @@ Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionE
 ```
 
 持久化过程也可能会失败，所以同时计算保存checksum，在恢复时校验，保证数据完整性。如果checksum不正确，说明该进程在该共识过程中异常退出了，
-对共识结果并无影响，可以安全删除数据，并使用[学习]()过程获得共识结果。
+对共识结果并无影响，可以安全删除数据，并[学习](./javadoc/io/github/parliament/ReplicateStateMachine.html#catchUp())其他节点的共识结果赶上进度。
 
 同时，输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](./javadoc/io/github/parliament/ReplicateStateMachine.html#forget())。
-TODO learner
 
 # 持久化
-## SkipList算法
+假设所有节点宕机重启，复制状态机可以依次执行所有共识结果中恢复缓存数据，显然这需要一直保留所有共识结果，且恢复过程会非常慢。
+
+所以缓存数据需要单独做持久化，重启只需执行尚未被执行的共识。前面已经提到过了复制状态机基于执行日志的重试机制以及其局限，
+下面讲讲对缓存数据进行持久化会遇到的各种细节。
+
+## skip list算法
+GET和PUT、DEL、RANGE是典型的有序Map的操作，比如JDK中的[NavigableMap接口](https://docs.oracle.com/javase/9/docs/api/java/util/NavigableMap.html)，
+其并发实现[ConcurrentSkipListMap](https://docs.oracle.com/javase/9/docs/api/java/util/concurrent/ConcurrentSkipListMap.html)采用了skip list算法，
+本应用也采用该算法。
+
+skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法说明见[wikipedia](https://zh.wikipedia.org/wiki/%E8%B7%B3%E8%B7%83%E5%88%97%E8%A1%A8)。
+该算法通过维护多层链表，依次快速接近查找目标。
+
+演示（来自Wikipedia）：
+
+![skip list](./skiplist.gif)
+
+## skip list的持久化实现
+在内存中实现skip list的数据结构非常简单，使用文件接口的持久化实现则需要考虑很多细节，例如：
+
+- 在内存实现中新增一个list node，只需使用new操作分配一个相关对象，文件实现要考虑：
+    - 在哪个文件里为node分配存储空间？
+    - 在该文件哪个位置开始分配？
+    - 存储node的编码格式？即如何表达node的地址、大小、字段边界？
+- 在内存实现中更新一个节点，只需获得节点引用，更新其成员对象的内容或成员引用，文件实现则要考虑：
+    - 待更新的node在哪个文件？在文件的哪个位置？
+    - node内容增多后，如何在文件里扩展？
+- 在内存实现中删除一个节点，只需对相关引用变量赋值null，JVM的GC自动回收内存，文件实现则要考虑：
+    - 删除后的node空间如何回收？
+- 此外，还需考虑文件更新操作的并发安全。
+
 ## Page管理
