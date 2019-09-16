@@ -1,8 +1,8 @@
-# 如何实现一个线性一致的分布式缓存
+# 自制线性一致的分布式缓存服务：设计及实现
 
 源码及构建、运行方式请参看[项目主页](https://github.com/z42y/parliament/)和[javadoc参考](./javadoc/index.html)
 
-# 功能及目标
+## 功能及目标
 
 该服务除了实现常见的"put _key_ _value_"、"get _key_"、"del _key0_  \[_key1_ ...\]"操作，
 还实现了按范围取值的命令"range _begin_ _end_"，其中begin和end为开始、结束key值，字典序排序。
@@ -25,10 +25,10 @@
 - leader选举：put leader 'my ip'，无论多少个客户端并发写入leader，只会成功一个，其余客户端会返回put失败。
 - 用户昵称绑定：put 'a nickname' 'user id', 某个昵称（'a nickname'）在全局只会被赋予唯一一个user id。
 
-# 接收请求
+## 接收请求
 因为redis的网络协议、客户端和库已经非常流行了，项目采用redis协议提供服务。
 
-## JAVA NIO的使用
+### JAVA NIO的使用
 首先使用NIO接收客户连接，在连接成功的channel上挂载一个[RespReadHandler](./javadoc/io/github/parliament/resp/RespReadHandler.html)类，
 使用[RespDecoder](./javadoc/io/github/parliament/resp/RespDecoder.html)类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断是否解码完成。
 
@@ -41,7 +41,7 @@
 
 因为缓存的对象都比较小，[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)并没有使用InputStream之类的模式进一步提升异步性能。
 
-## 网络协议的解析构造
+### 网络协议的解析构造
 [RespDecoder](./javadoc/io/github/parliament/resp/RespDecoder.html)是redis的[RESP协议](https://redis.io/topics/protocol)解码器，
 RESP一共有以下几种数据类型：
 - SIMPLE_STRING 字符串
@@ -60,7 +60,7 @@ RESP一共有以下几种数据类型：
 所以通过实现自己的[ByteBuf](./javadoc/io/github/parliament/resp/ByteBuf.html)进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。
 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短、数据量都小，无法体现其优势。
 
-# 解决一致性问题
+## 解决一致性问题
 前面说到服务需要保证线性一致，如果[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)直接对key-value进行读写，将会导致不一致的问题。
 
 举个简单的例子：
@@ -75,14 +75,14 @@ RESP一共有以下几种数据类型：
 
 保证线性一致性的常见思想是复制状态机。
 
-## 复制状态机
+### 复制状态机
 复制状态机思想是将程序看做一个状态机，在某个状态下，对某个确定的输入，程序的下一个状态是确定的。
 
 举个例子，对两个数据库进行完全相同的一系列读写操作后，这两个数据库的数据一定是一样的（当然不能使用如current_timestamp之类的sql函数）。
 
 同样的，在缓存服务中，所有节点的初始状态是一样的，如果所有客户端的读写操作，在所有节点上按相同顺序进行执行，那么任何一个操作完成时，所有节点状态一定是一致的。
 
-## 全序广播（原子广播）及共识
+### 全序广播（原子广播）及共识
 多个客户端会发生并发操作，服务器无法区分这些操作的先后顺序，因为硬件时钟并不可靠，即便存在一个可靠的时钟，网络的延迟也导致操作在不同节点有不同的到达顺序。
 
 同时，节点在收到一个操作请求时，如何确定是否有之前的操作尚未到达？
@@ -93,13 +93,13 @@ RESP一共有以下几种数据类型：
 
 协商**每个**编号操作内容的过程，就是**一次**分布式共识达成过程，因此全序广播问题等价为共识问题。
 
-## paxos共识算法
+### paxos共识算法
 我们使用Paxos共识算法，paxos算法的推导过程就是一个为了得到结果，不断对条件进行约束的过程。
 
 首先，某个节点作为发起者（proposer），对其他节点发起提案，一种直观的方法是：如果接收者（acceptor）同意该提案，返回t，否则返回f。
 如所有接收者返回t，则节点a通知所有接收者提案通过，所有节点执行该提案内容，否则节点a通知提案取消。接收者需要满足**约束P1**：
 
-    P1：一个 acceptor 必须接受（accept）第一次收到的提案。
+> P1：一个 acceptor 必须接受（accept）第一次收到的提案。
     
 显然，违反P1的系统，不会通过任何提案被通过。
 
@@ -120,28 +120,28 @@ RESP一共有以下几种数据类型：
 
 既然接收者需接收多个提案，这就引出**约束P2**：
 
-    P2：一旦一个具有 value v 的提案被批准（chosen），那么被批准（chosen）的更高编号的提案必须具有 value v。
+>P2：一旦一个具有 value v 的提案被批准（chosen），那么被批准（chosen）的更高编号的提案必须具有 value v。
 
 提案被批准，表示至少被一个接收者接受过。所以加强P2，得到约束P2a：
 
-    一旦某个提案值v获得批准，任何接收者接收的更高编号的提案值也是v。
+>一旦某个提案值v获得批准，任何接收者接收的更高编号的提案值也是v。
     
 因为通信是异步的，一个从休眠或故障恢复的节点，给某个尚未收到任何提案的节点，提交一个更高编号的不同提案v1，按照约束P1，该节点必须接收该提案，
 这就违背了约束P2a，所以，与其约束接收者，约束提交者更加方便，对P2a加强约束，得到约束P2b：
 
-    一旦某个提案值v获得批准，任何发起者发起的更高编号的提案值必须是v。
+>一旦某个提案值v获得批准，任何发起者发起的更高编号的提案值必须是v。
 
 我们来证明P2b如何保证P2。
 
 使用归纳法，假设编号为m（m < n）的提案被选中，且m到n-1的提案值都为v，那么存在一个大多数接收者的集合C接收了m提案，这意味着：
 
-    C中每个接收者都批准了m到n-1其中一个提案，m到n-1的每个被批准的提案其值都是v。
+>C中每个接收者都批准了m到n-1其中一个提案，m到n-1的每个被批准的提案其值都是v。
 
 因为任何大多数接收者集合S，和C至少有一个公共接收者，编号为n的提案w被批准，那么只有两种情况：
-
-    1. 存在一个包含大多数接收者的集合S，从未接受过小于n的提案。
-    2. w和S中所有已接受的、编号小于n的最大编号提案值相同，即值为v。因为公共接收者需要批准相同的提案值。
-
+>
+>1. 存在一个包含大多数接收者的集合S，从未接受过小于n的提案。
+>2. w和S中所有已接受的、编号小于n的最大编号提案值相同，即值为v。因为公共接收者需要批准相同的提案值。
+>
 这个证明看起来很多余，但是请注意，编号m到n的提案不是按编号先后顺序发起的，这些提案的发起顺序是没有保证的。
 
 编号为n提案的发起者需要知道所有已接受提案中小于n的最大编号提案的值（如果有）。知道已接受的提案是值很简单的，预测未来很难办，
@@ -151,26 +151,26 @@ RESP一共有以下几种数据类型：
 
 由此强化约束P1，得到P1a:
     
-    接收者拒绝接受编号比当前已知最大编号n更小的提案。
+>接收者拒绝接受编号比当前已知最大编号n更小的提案。
 
 得到paxos算法过程如下：
 
-- prepare阶段：
-    - 发起者选择一个提案编号n并将prepare请求发送给接收者中的一个多数派；
-    - 接收者收到prepare消息后，如果提案的编号大于它已经回复的所有prepare消息(回复消息表示接受accept)，
+1. prepare阶段：
+    1. 发起者选择一个提案编号n并将prepare请求发送给接收者中的一个多数派；
+    2. 接收者收到prepare消息后，如果提案的编号大于它已经回复的所有prepare消息(回复消息表示接受accept)，
 则接收者将自己上次接受的提案回复给发起者，并承诺不再回复小于n的提案；如果没有回复过prepare消息，也承诺不再回复小于n的提案。
-- 批准阶段：
-    - 当一个发起者收到了多数接收者对prepare的回复后，就进入批准阶段。
+2. accept阶段：
+    1. 当一个发起者收到了多数接收者对prepare的回复后，就进入批准阶段。
  它要向回复prepare请求的接收者发送accept请求，包括编号n和prepare阶段返回的小于n的最大提案的值。
-    - 如果accept的提案编号n大于等于接收者已承诺的编号值，接收者就批准这个请求。
-    - accept被多数派批准后，发起者再通知所有接收者提案已批准（decided)的消息。
+    2. 如果accept的提案编号n大于等于接收者已承诺的编号值，接收者就批准这个请求。
+    3. accept被多数派批准后，发起者再通知所有接收者提案已批准（decided)的消息。
  
-# 实现复制状态机
+## 实现复制状态机
 [KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)收到请求，不会立即执行，
 而是交给[ReplicateStateMachine](./javadoc/io/github/parliament/ReplicateStateMachine.html)生成一个新的状态机输入，
 并委托ReplicateStateMachine对该输入所在编号的操作达成共识，由ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。
 
-```
+```{.java}
 Input input = rsm.newState(bytes);
 CompletableFuture<Output> future = rsm.submit(input);
 return future.thenApply((output) -> {
@@ -191,7 +191,7 @@ return future.thenApply((output) -> {
 这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如有递增命令inc，两个"inc x"请求不加id会达成一次共识，但实际只执行了一次。
 这与客户预期不一致，导致bug。如下所示：
 
-```$java
+```{.java}
 public Input newState(byte[] content) throws DuplicateKeyException {
     return Input.builder().id(next()).uuid(uuid()).content(content).build();
 }
@@ -212,7 +212,7 @@ ReplicateStateMachine可以并发进行多个Paxos共识实例，每个实例递
 ReplicateStateMachine并发提交共识请求给共识服务[Coordinator](./javadoc/io/github/parliament/Coordinator.html)，
 Coordinator可以由各种共识算法实现。
 
-# 实现Paxos共识算法
+## 实现Paxos共识算法
 完成一次共识过程的Paxos[伪代码](http://nil.csail.mit.edu/6.824/2015/notes/paxos-code.html)如下：
 ```
 --- Paxos Proposer ---
@@ -268,7 +268,7 @@ Coordinator可以由各种共识算法实现。
 
 接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。
 如prepare方法的代理：
-```
+```{.java}
 Prepare delegatePrepare(int round, String n) throws IOException {
     synchronized (channel) {
         ByteBuffer request = codec.encodePrepare(round, n);
@@ -288,7 +288,7 @@ Prepare delegatePrepare(int round, String n) throws IOException {
 
 所以，在prepare和accept阶段，都需要持久化Acceptor的状态，并在创建实例的Acceptor时，先尝试恢复持久化的状态。
 如[LocalAcceptor](./javadoc/io/github/parliament/paxos/acceptor/LocalAcceptor.html)的prepare：
-```
+```{.java}
 @Override
 public synchronized Prepare prepare(String n) throws Exception {
     if (np == null || n.compareTo(np) > 0) {
@@ -300,7 +300,7 @@ public synchronized Prepare prepare(String n) throws Exception {
 }
 ```
 [Paxos类](./javadoc/io/github/parliament/paxos/Paxos.html)保存和恢复acceptor的方法分别如下：
-```
+```{.java}
 void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
     if (Strings.isNullOrEmpty(acceptor.getNp())) {
         return;
@@ -344,13 +344,13 @@ Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionE
 
 同时，输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](./javadoc/io/github/parliament/ReplicateStateMachine.html#forget())。
 
-# 持久化
+## 持久化
 假设所有节点宕机重启，复制状态机可以依次执行所有共识结果中恢复缓存数据，显然这需要一直保留所有共识结果，且恢复过程会非常慢。
 
 所以缓存数据需要单独做持久化，重启只需执行尚未被执行的共识。前面已经提到过了复制状态机基于执行日志的重试机制以及其局限，
 下面讲讲对缓存数据进行持久化会遇到的各种细节。
 
-## skip list算法
+### skip list算法
 GET和PUT、DEL、RANGE是典型的有序Map的操作，比如JDK中的[NavigableMap接口](https://docs.oracle.com/javase/9/docs/api/java/util/NavigableMap.html)，
 其并发实现[ConcurrentSkipListMap](https://docs.oracle.com/javase/9/docs/api/java/util/concurrent/ConcurrentSkipListMap.html)采用了skip list算法，
 本应用也采用该算法。
@@ -362,7 +362,7 @@ skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法
 
 ![skip list](./skiplist.gif)
 
-## skip list的持久化实现
+### skip list的持久化实现
 在内存中实现skip list的数据结构非常简单，使用文件接口的持久化实现则需要考虑很多细节，例如：
 
 - 在内存实现中新增一个list node，只需使用new操作分配一个相关对象，文件实现要考虑：
@@ -376,4 +376,4 @@ skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法
     - 删除后的node空间如何回收？
 - 此外，还需考虑文件更新操作的并发安全。
 
-## Page管理
+### Page管理
