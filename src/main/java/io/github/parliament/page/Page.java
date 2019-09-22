@@ -3,6 +3,9 @@ package io.github.parliament.page;
 import com.google.common.base.Preconditions;
 import lombok.*;
 
+/**
+ * 见{@link Pager}
+ */
 @EqualsAndHashCode
 @ToString
 public class Page {

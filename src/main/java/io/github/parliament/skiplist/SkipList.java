@@ -252,21 +252,21 @@ public class SkipList implements Persistence {
             Preconditions.checkState(this.keys > 0);
             Preconditions.checkState(!map.isEmpty());
             Page p = SkipList.this.allocatePage(level);
-            SkipListPage page = skipListPages.get(p.getNo());
+            SkipListPage newPage = skipListPages.get(p.getNo());
 
-            page.map = new ConcurrentSkipListMap<>(map.tailMap(map.firstKey(), false));
+            newPage.map = new ConcurrentSkipListMap<>(map.tailMap(map.firstKey(), false));
             Preconditions.checkState(!map.isEmpty());
             map = new ConcurrentSkipListMap<>(map.headMap(map.firstKey(), true));
 
             int right = this.rightPage;
-            this.rightPage = page.getPage().getNo();
-            page.rightPage = right;
+            this.rightPage = newPage.getPage().getNo();
+            newPage.rightPage = right;
 
             this.update();
-            page.update();
+            newPage.update();
 
             Preconditions.checkState(pager.getPageSize() - this.getSize() >= 0);
-            Preconditions.checkState(pager.getPageSize() - page.getSize() >= 0);
+            Preconditions.checkState(pager.getPageSize() - newPage.getSize() >= 0);
         }
 
         synchronized void sync() throws IOException {
