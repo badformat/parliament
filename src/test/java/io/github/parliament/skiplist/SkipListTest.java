@@ -34,7 +34,7 @@ class SkipListTest {
 
         SkipList.init(path, level, pager);
         skipList = SkipList.builder().path(path).pager(pager).build();
-        skipList.setGetAfterPut(true);
+        skipList.setCheckAfterPut(true);
     }
 
     @AfterEach
@@ -61,7 +61,6 @@ class SkipListTest {
         skipList.put(key, value);
 
         SkipList.SkipListPage sp = skipList.getSkipListPages().get(0);
-        sp.sync();
 
         Page page = pager.page(skipList.getStartPages()[0]);
 
@@ -139,7 +138,7 @@ class SkipListTest {
 
     @Test
     void repeatGet() throws IOException, ExecutionException {
-        skipList.setGetAfterPut(false);
+        skipList.setCheckAfterPut(false);
         List<byte[]> keys = new ArrayList<>();
         Map<byte[], byte[]> kvs = new HashMap<>();
 

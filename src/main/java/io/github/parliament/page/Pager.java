@@ -2,6 +2,7 @@ package io.github.parliament.page;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.MapMaker;
+import io.github.parliament.files.AtomicFileWriter;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -43,6 +44,7 @@ public class Pager {
     public static final String PAGE_SEQ_FILENAME = "page_seq";
     public static final String METAINF_FILENAME = "metainf";
     public static final String HEAP_FILENAME_PREFIX = "heap";
+    public static final String LOG_DIR = "log";
     public static final int PAGE_HEAD_SIZE = 8;
 
     @Getter
@@ -54,6 +56,7 @@ public class Pager {
     @Getter
     private int pagesInHeap;
     private ConcurrentMap<Integer, Heap> heaps = new MapMaker().weakValues().makeMap();
+    private AtomicFileWriter atomicFileWriter;
 
     public static void init(Path path, int heapSize, int pageSize) throws IOException {
         if (!Files.exists(path)) {
@@ -68,6 +71,7 @@ public class Pager {
         if (Files.exists(path.resolve(METAINF_FILENAME))) {
             return;
         }
+        Files.createDirectories(path.resolve(LOG_DIR));
         try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(METAINF_FILENAME),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
 
@@ -109,6 +113,8 @@ public class Pager {
             pageSize = dst.getInt();
             pagesInHeap = Pager.maxPagesInHeap(heapSize, pageSize);
         }
+        atomicFileWriter = AtomicFileWriter.builder().dir(path.resolve(LOG_DIR)).build();
+        atomicFileWriter.recovery();
     }
 
     public Page page(Integer pn) throws IOException {
@@ -304,15 +310,9 @@ public class Pager {
         }
 
         private void sync(Page page) throws IOException {
-            try (SeekableByteChannel chn = Files.newByteChannel(heapPath, StandardOpenOption.WRITE)) {
-                int loc = getHead(page.getNo()).getLocation();
-                Preconditions.checkArgument(loc > 0);
-                chn.position(loc);
-                ByteBuffer src = ByteBuffer.wrap(page.getContent());
-                while (src.hasRemaining()) {
-                    chn.write(src);
-                }
-            }
+            int loc = getHead(page.getNo()).getLocation();
+            Preconditions.checkArgument(loc > 0);
+            Pager.this.atomicFileWriter.write(heapPath, loc, page.getContent());
         }
 
         private void syncHeads() throws IOException {
@@ -332,8 +332,6 @@ public class Pager {
                 }
             }
         }
-
-
     }
 
     /**
