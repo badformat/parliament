@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 /**
  * {@link Page}管理器，负责在在{@link Heap}中分配、获取、回收一块文件page页面。
  *
- * {@link Page}是在某个{@link Heap}文件中的一块地址，每个Page都有独立的编号。
+ * {@link Page}是在某个{@link Heap}文件中的一块大小固定的连续字节数组，每个Page都有独立的编号。
  *
  * 4g file, 65536个64k
  *
