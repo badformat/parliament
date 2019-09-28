@@ -4,7 +4,6 @@ import io.github.parliament.page.Pager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -12,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
-import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
@@ -38,7 +36,7 @@ class SkipListParallelTest {
 
         SkipList.init(path, level, pager);
         skipList = SkipList.builder().path(path).pager(pager).build();
-        skipList.setGetAfterPut(true);
+        skipList.setCheckAfterPut(true);
     }
 
     @AfterEach

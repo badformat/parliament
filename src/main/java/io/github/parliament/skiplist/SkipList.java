@@ -54,13 +54,6 @@ public class SkipList implements Persistence {
     private final LoadingCache<Integer, SkipListPage> skipListPages = CacheBuilder
             .newBuilder()
             .expireAfterWrite(Duration.ofMinutes(5))
-            .removalListener((RemovalListener<Integer, SkipListPage>) notification -> {
-                try {
-                    notification.getValue().sync();
-                } catch (IOException e) {
-                    logger.error("sync skip list page failed.", e);
-                }
-            })
             .build(new CacheLoader<>() {
                 @Override
                 public SkipListPage load(Integer pn) throws Exception {
@@ -74,7 +67,7 @@ public class SkipList implements Persistence {
 
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
-    private boolean getAfterPut = false;
+    private boolean checkAfterPut = false;
 
     private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
@@ -134,8 +127,6 @@ public class SkipList implements Persistence {
         private ConcurrentNavigableMap<byte[], byte[]> map;
         @Getter
         private volatile SkipListPage superPage;
-        @Getter
-        private volatile boolean dirty = false;
 
         SkipListPage(Page page) {
             this.page = page;
@@ -175,7 +166,6 @@ public class SkipList implements Persistence {
                     cur--;
                 }
             }
-            dirty = true;
         }
 
         void put(byte[] key, byte[] value) throws IOException, ExecutionException {
@@ -246,6 +236,7 @@ public class SkipList implements Persistence {
                 // allocate a new page and insert it into list
                 split();
             }
+            sync();
         }
 
         private void split() throws IOException, ExecutionException {
@@ -269,10 +260,7 @@ public class SkipList implements Persistence {
             Preconditions.checkState(pager.getPageSize() - newPage.getSize() >= 0);
         }
 
-        synchronized void sync() throws IOException {
-            if (!isDirty()) {
-                return;
-            }
+        synchronized private void sync() throws IOException {
             ByteBuffer buf = ByteBuffer.wrap(new byte[size]);
             buf.put(meta);
             buf.putInt(rightPage);
@@ -291,7 +279,6 @@ public class SkipList implements Persistence {
             page.updateContent(buf.array());
 
             SkipList.this.pager.sync(page);
-            dirty = false;
         }
 
         void setSuperPage(SkipListPage superPage) {
@@ -344,7 +331,7 @@ public class SkipList implements Persistence {
 
             SkipListPage page = findLeafSkipListPageOfKey(key);
             page.put(key, value);
-            if (getAfterPut) {
+            if (checkAfterPut) {
                 byte[] v2 = get(key);
                 if (!Arrays.equals(value, v2)) {
                     throw new IllegalStateException("get value of key is " + v2);
@@ -472,6 +459,7 @@ public class SkipList implements Persistence {
         while (current != null) {
             Map.Entry<byte[], byte[]> entry = current.map.floorEntry(key);
             if (entry != null) {
+                // 只是在本page发现小于key的记录，还需检查下一页。
                 found = current;
             }
 
@@ -479,12 +467,12 @@ public class SkipList implements Persistence {
                 int pn = current.getRightPage();
                 SkipListPage right = skipListPages.get(pn);
                 if (right.map.isEmpty()) {
+                    // 跳过所有key都被删除了的page，防止漏查。TODO recycle
                     current.rightPage = right.rightPage;
                     current.sync();
                 } else {
                     current = right;
                 }
-
             } else {
                 current = null;
             }
