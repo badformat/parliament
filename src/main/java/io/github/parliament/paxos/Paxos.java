@@ -6,7 +6,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.MapMaker;
-import com.google.common.primitives.Bytes;
 import io.github.parliament.Coordinator;
 import io.github.parliament.Persistence;
 import io.github.parliament.Sequence;
@@ -26,11 +25,9 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.*;
-import java.util.zip.CRC32;
 
 public class Paxos implements Coordinator, LocalAcceptors {
     private static final Logger logger = LoggerFactory.getLogger(Paxos.class);
@@ -56,6 +53,34 @@ public class Paxos implements Coordinator, LocalAcceptors {
     private volatile int max = -1;
     private volatile int min = -1;
     private volatile int done = -1;
+
+    class LocalAcceptorWithPersistence extends LocalAcceptor {
+        LocalAcceptorWithPersistence(int round) {
+            super(round);
+        }
+
+        LocalAcceptorWithPersistence(int round, String np, String na, byte[] va) {
+            super(round);
+            setNp(np);
+            setNa(na);
+            setVa(va);
+        }
+
+        @Override
+        public void decide(byte[] agreement) throws Exception {
+            persistence.put((round + "agreement").getBytes(), agreement);
+            persistence();
+            if (round > max) {
+                max(round);
+            }
+            proposals.get(round).complete(agreement);
+        }
+
+        @Override
+        public void persistence() throws IOException, ExecutionException {
+            persistenceAcceptor(round, this);
+        }
+    }
 
     @Builder
     private Paxos(@NonNull ExecutorService executorService,
@@ -92,10 +117,9 @@ public class Paxos implements Coordinator, LocalAcceptors {
             proposals.get(round).complete(agreement);
             return;
         }
-        List<Acceptor> peers = new ArrayList<>();
         Acceptor me = create(round);
         List<? extends Acceptor> others = peers(round);
-        peers.addAll(others);
+        List<Acceptor> peers = new ArrayList<>(others);
         peers.add(me);
         Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer(peers, sequence, content));
 
@@ -118,7 +142,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
         return min;
     }
 
-    void min(int m) throws IOException, ExecutionException {
+    private void min(int m) throws IOException, ExecutionException {
         this.min = m;
         persistence.put("min".getBytes(), ByteBuffer.allocate(4).putInt(m).array());
     }
@@ -185,36 +209,8 @@ public class Paxos implements Coordinator, LocalAcceptors {
         return persistence.get((round + "agreement").getBytes());
     }
 
-    List<? extends Acceptor> peers(int round) {
+    private List<? extends Acceptor> peers(int round) {
         return peerAcceptors.create(round);
-    }
-
-    class LocalAcceptorWithPersistence extends LocalAcceptor {
-        LocalAcceptorWithPersistence(int round) {
-            super(round);
-        }
-
-        LocalAcceptorWithPersistence(int round, String np, String na, byte[] va) {
-            super(round);
-            setNp(np);
-            setNa(na);
-            setVa(va);
-        }
-
-        @Override
-        public void decide(byte[] agreement) throws Exception {
-            persistence.put((round + "agreement").getBytes(), agreement);
-            persistence();
-            if (round > max) {
-                max(round);
-            }
-            proposals.get(round).complete(agreement);
-        }
-
-        @Override
-        public void persistence() throws IOException, ExecutionException {
-            persistenceAcceptor(round, this);
-        }
     }
 
     @Override
@@ -236,8 +232,6 @@ public class Paxos implements Coordinator, LocalAcceptors {
         if (acceptor.getVa() != null) {
             persistence.put((round + "va").getBytes(), acceptor.getVa());
         }
-
-        persistence.put((round + "checksum").getBytes(), checksum(acceptor.getNp(), acceptor.getNa(), acceptor.getVa()));
     }
 
     Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
@@ -252,13 +246,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
         String nps = new String(np);
         String nas = na == null ? null : new String(na);
 
-        byte[] checksum1 = checksum(nps, nas, va);
-        byte[] checksum2 = persistence.get((round + "checksum").getBytes());
-        if (Arrays.equals(checksum1, checksum2)) {
-            return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
-        }
-        deleteAcceptor(round);
-        return Optional.empty();
+        return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
     }
 
     void deleteAcceptor(int round) throws IOException, ExecutionException {
@@ -266,19 +254,5 @@ public class Paxos implements Coordinator, LocalAcceptors {
         persistence.del((round + "na").getBytes());
         persistence.del((round + "va").getBytes());
         persistence.del((round + "checksum").getBytes());
-    }
-
-    private byte[] checksum(String np, String na, byte[] va) {
-        byte[] bytes = null;
-        bytes = Bytes.concat(np.getBytes());
-        if (na != null) {
-            bytes = Bytes.concat(bytes, na.getBytes());
-        }
-        if (va != null) {
-            bytes = Bytes.concat(bytes, va);
-        }
-        CRC32 crc32 = new CRC32();
-        crc32.update(bytes);
-        return ByteBuffer.allocate(8).putLong(crc32.getValue()).array();
     }
 }

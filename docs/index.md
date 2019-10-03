@@ -1,4 +1,4 @@
-# 自制线性一致的分布式缓存服务：设计及实现
+# 分布式可靠性问题一览：以实现一个分布式缓存服务为例
 
 源码及构建、运行方式请参看[项目主页](https://github.com/z42y/parliament/)和[javadoc参考](./javadoc/index.html)
 
@@ -188,9 +188,8 @@ return future.thenApply((output) -> {
 ```
 如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。
 
-这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如有递增命令inc，两个"inc x"请求不加id会达成一次共识，但实际只执行了一次。
-这与客户预期不一致，导致bug。如下所示：
-
+这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的"append x y"请求如不加id会达成一次共识，但实际只执行了一次，
+value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：
 ```{.java}
 public Input newState(byte[] content) throws DuplicateKeyException {
     return Input.builder().id(next()).uuid(uuid()).content(content).build();
@@ -281,12 +280,15 @@ Prepare delegatePrepare(int round, String n) throws IOException {
 }
 ```
 
+### 正确性保证
 上面的伪代码很简单，但是在进程可能异常退出的情况下，是不够完备的。进程被杀死、断电都会导致正在共识协商的进程退出，并在恢复后，出现错误的结果。
 
 举个例子，多数派为某个编号的共识实例通过了一个提案，但是在decide阶段，多数派全部异常退出，只有多数派以外的节点处理了提案结果。
 稍后这些多数派又恢复，之前的信息已经丢失，此时又收到同一个共识实例编号的另一个提案，此提案被通过，和未异常退出的节点接受的提案不一致。
 
-所以，在prepare和accept阶段，都需要持久化Acceptor的状态，并在创建实例的Acceptor时，先尝试恢复持久化的状态。
+所以，在prepare和accept阶段，都需要持久化Acceptor的状态，实例化Acceptor时，先尝试恢复已持久化的状态。
+并通过定期[学习](./javadoc/io/github/parliament/ReplicateStateMachine.html#catchUp())其他节点的共识结果，快速赶上进度。
+
 如[LocalAcceptor](./javadoc/io/github/parliament/paxos/acceptor/LocalAcceptor.html)的prepare：
 ```{.java}
 @Override
@@ -312,8 +314,6 @@ void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, 
     if (acceptor.getVa() != null) {
         persistence.put((round + "va").getBytes(), acceptor.getVa());
     }
-
-    persistence.put((round + "checksum").getBytes(), checksum(acceptor.getNp(), acceptor.getNa(), acceptor.getVa()));
 }
 
 Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionException {
@@ -325,24 +325,39 @@ Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionE
     byte[] na = persistence.get((round + "na").getBytes());
     byte[] va = persistence.get((round + "va").getBytes());
 
-
     String nps = new String(np);
     String nas = na == null ? null : new String(na);
 
-    byte[] checksum1 = checksum(nps, nas, va);
-    byte[] checksum2 = persistence.get((round + "checksum").getBytes());
-    if (Arrays.equals(checksum1, checksum2)) {
-        return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
-    }
-    deleteAcceptor(round);
-    return Optional.empty();
+    return Optional.of(new LocalAcceptorWithPersistence(round, nps, nas, va));
 }
 ```
 
-持久化过程也可能会失败，所以同时计算保存checksum，在恢复时校验，保证数据完整性。如果checksum不正确，说明该进程在该共识过程中异常退出了，
-对共识结果并无影响，可以安全删除数据，并[学习](./javadoc/io/github/parliament/ReplicateStateMachine.html#catchUp())其他节点的共识结果赶上进度。
+注意，文件写入不是原子的，可能存在只写入了部分数据的问题，persistence()需要保证要么完全写入，要么完全不写，我们在persistence的skip list实现中讲解这一点。
 
 同时，输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](./javadoc/io/github/parliament/ReplicateStateMachine.html#forget())。
+### 活跃性问题
+根据[FLP不可能原理](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)：
+
+>任何分布式共识算法，只要有一个进程宕机，剩余的进程存在永远无法达成共识的可能性。
+
+对于Paxos算法，很容易找到无法达成共识的情况，比如不同proposer的accept每次都因其他proposer产生的更高prepare编号而acceptor被拒绝。
+解决办法是在可能冲突时，引入随机等待，降低这种可能性，并在重试达到最大次数时，失败退出。如：
+```{.java}
+if (!decided) {
+    retryCount++;
+    try {
+        Thread.sleep(Math.abs(random.nextInt()) % 300);
+    } catch (InterruptedException e) {
+        logger.error("Failed in propose.", e);
+        return null;
+    }
+    if (retryCount >= 7) {
+        logger.error("Failed in propose.Retried {} times.", 7);
+        throw new IllegalStateException();
+    }
+}
+```
+如果去掉这个随机等待，在多核机器运行单元测试非常容易出现重试失败。
 
 ## 持久化
 假设所有节点宕机重启，复制状态机可以依次执行所有共识结果中恢复缓存数据，显然这需要一直保留所有共识结果，且恢复过程会非常慢。

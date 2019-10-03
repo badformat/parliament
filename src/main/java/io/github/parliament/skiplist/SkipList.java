@@ -4,7 +4,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalListener;
 import io.github.parliament.Persistence;
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
@@ -28,12 +27,11 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- *
  * ## skip list in page,ascending order
- *
+ * <p>
  * level > 0:
  * | meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | next level page no (4 bytes) | key len | key | next level page no | ...
- *
+ * <p>
  * level 0:
  * | meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | value len (4 bytes) | value | ...
  */
@@ -118,7 +116,7 @@ public class SkipList implements Persistence {
         @Getter
         private volatile int size;
         @Getter
-        private volatile int rightPage;
+        private volatile int rightPageNo;
         @Getter
         private volatile int keys;
         @Getter
@@ -134,7 +132,7 @@ public class SkipList implements Persistence {
             meta = buf.get();
             level = meta & 0x0f;
             isLeaf = (level == 0);
-            rightPage = buf.getInt();
+            rightPageNo = buf.getInt();
             keys = buf.getInt();
             size = HEAD_SIZE_IN_PAGE;
             map = new ConcurrentSkipListMap<>(Arrays::compare);
@@ -169,13 +167,13 @@ public class SkipList implements Persistence {
         }
 
         void put(byte[] key, byte[] value) throws IOException, ExecutionException {
-            int size = 4 + key.length + value.length;
+            int space = 4 + key.length + value.length;
             if (isLeaf) {
                 // value length field.
-                size += 4;
+                space += 4;
             }
 
-            if (size > pager.getPageSize()) {
+            if (space > pager.getPageSize()) {
                 throw new KeyValueTooLongException("Can't put the key and value in one page.");
             }
             map.put(key, value);
@@ -207,7 +205,7 @@ public class SkipList implements Persistence {
                 return;
             }
             if (superPage == null) {
-                superPage = findSkipListPageOfKey(key, level + 1);
+                superPage = findSkipListPageForKey(key, level + 1);
             }
 
             byte[] value = ByteBuffer.allocate(4).putInt(page.getNo()).array();
@@ -230,13 +228,17 @@ public class SkipList implements Persistence {
             size = s;
             keys = k;
 
-            int left = pager.getPageSize() - this.getSize();
-            if (left < 0) {
+            if (leftSize() < 0) {
                 // check left size
                 // allocate a new page and insert it into list
                 split();
+            } else {
+                sync();
             }
-            sync();
+        }
+
+        private int leftSize() {
+            return pager.getPageSize() - this.getSize();
         }
 
         private void split() throws IOException, ExecutionException {
@@ -248,10 +250,8 @@ public class SkipList implements Persistence {
             newPage.map = new ConcurrentSkipListMap<>(map.tailMap(map.firstKey(), false));
             Preconditions.checkState(!map.isEmpty());
             map = new ConcurrentSkipListMap<>(map.headMap(map.firstKey(), true));
-
-            int right = this.rightPage;
-            this.rightPage = newPage.getPage().getNo();
-            newPage.rightPage = right;
+            newPage.rightPageNo = this.rightPageNo;
+            this.rightPageNo = newPage.getPage().getNo();
 
             this.update();
             newPage.update();
@@ -263,7 +263,7 @@ public class SkipList implements Persistence {
         synchronized private void sync() throws IOException {
             ByteBuffer buf = ByteBuffer.wrap(new byte[size]);
             buf.put(meta);
-            buf.putInt(rightPage);
+            buf.putInt(rightPageNo);
             buf.putInt(keys);
 
             for (byte[] key : map.keySet()) {
@@ -329,7 +329,7 @@ public class SkipList implements Persistence {
                 throw new KeyValueTooLongException("Can't put the key and value in one page.");
             }
 
-            SkipListPage page = findLeafSkipListPageOfKey(key);
+            SkipListPage page = findLeafSkipListPageForKey(key);
             page.put(key, value);
             if (checkAfterPut) {
                 byte[] v2 = get(key);
@@ -346,14 +346,14 @@ public class SkipList implements Persistence {
     public byte[] get(byte[] key) throws IOException, ExecutionException {
         try {
             readWriteLock.readLock().lock();
-            SkipListPage page = findLeafSkipListPageOfKey(key);
+            SkipListPage page = findLeafSkipListPageForKey(key);
             while (page != null) {
                 byte[] v = page.get(key);
                 if (v != null) {
                     return v;
                 }
-                if (page.rightPage != -1) {
-                    page = skipListPages.get(page.rightPage);
+                if (page.rightPageNo != -1) {
+                    page = skipListPages.get(page.rightPageNo);
                 } else {
                     page = null;
                 }
@@ -370,7 +370,7 @@ public class SkipList implements Persistence {
         }
         try {
             readWriteLock.readLock().lock();
-            SkipListPage current = findLeafSkipListPageOfKey(min);
+            SkipListPage current = findLeafSkipListPageForKey(min);
             List<byte[]> r = new ArrayList<>();
             while (current != null) {
                 if (current.getMap().isEmpty()) {
@@ -380,8 +380,8 @@ public class SkipList implements Persistence {
                     return r;
                 }
                 r.addAll(current.getMap().subMap(min, max).values());
-                if (current.getRightPage() != -1) {
-                    current = skipListPages.get(current.getRightPage());
+                if (current.getRightPageNo() != -1) {
+                    current = skipListPages.get(current.getRightPageNo());
                 } else {
                     current = null;
                 }
@@ -396,7 +396,7 @@ public class SkipList implements Persistence {
         try {
             boolean d = false;
             readWriteLock.writeLock().lock();
-            SkipListPage current = findLeafSkipListPageOfKey(key);
+            SkipListPage current = findLeafSkipListPageForKey(key);
             if (current.del(key)) {
                 d = true;
             }
@@ -410,11 +410,11 @@ public class SkipList implements Persistence {
         }
     }
 
-    private SkipListPage findLeafSkipListPageOfKey(byte[] key) throws IOException, ExecutionException {
-        return findSkipListPageOfKey(key, 0);
+    private SkipListPage findLeafSkipListPageForKey(byte[] key) throws IOException, ExecutionException {
+        return findSkipListPageForKey(key, 0);
     }
 
-    private SkipListPage findSkipListPageOfKey(byte[] key, int lv) throws IOException, ExecutionException {
+    private SkipListPage findSkipListPageForKey(byte[] key, int lv) throws IOException, ExecutionException {
         Preconditions.checkArgument(lv >= 0);
         Preconditions.checkArgument(lv < SkipList.this.height);
         int cursor = height - 1;
@@ -453,7 +453,7 @@ public class SkipList implements Persistence {
      * @return
      * @throws IOException
      */
-    private SkipListPage floorPage(SkipListPage start, byte[] key) throws IOException, ExecutionException {
+    private SkipListPage floorPage(SkipListPage start, byte[] key) throws ExecutionException {
         SkipListPage current = start;
         SkipListPage found = null;
         while (current != null) {
@@ -463,16 +463,9 @@ public class SkipList implements Persistence {
                 found = current;
             }
 
-            if (current.getRightPage() > 0) {
-                int pn = current.getRightPage();
-                SkipListPage right = skipListPages.get(pn);
-                if (right.map.isEmpty()) {
-                    // 跳过所有key都被删除了的page，防止漏查。TODO recycle
-                    current.rightPage = right.rightPage;
-                    current.sync();
-                } else {
-                    current = right;
-                }
+            if (current.getRightPageNo() > 0) {
+                int pn = current.getRightPageNo();
+                current = skipListPages.get(pn);
             } else {
                 current = null;
             }

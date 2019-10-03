@@ -29,20 +29,26 @@ public class AtomicFileWriter {
         Files.createDirectories(dir);
     }
 
-    public void write(Path fileToWrite, int position, byte[] content) throws IOException {
+    public void write(Path fileToWrite, int position, ByteBuffer content) throws IOException {
         Preconditions.checkArgument(!fileToWrite.toAbsolutePath().startsWith(dir.toAbsolutePath()), "Can't write file in log directory");
 
+        content.mark();
         Path log = log(fileToWrite, position, content);
+        content.reset();
 
         try (SeekableByteChannel chn = Files.newByteChannel(fileToWrite, StandardOpenOption.WRITE)) {
             chn.position(position);
-            ByteBuffer src = ByteBuffer.wrap(content);
-            while (src.hasRemaining()) {
-                chn.write(src);
+            while (content.hasRemaining()) {
+                chn.write(content);
             }
         }
 
         Files.delete(log);
+    }
+
+    public void write(Path fileToWrite, int position, byte[] content) throws IOException {
+            ByteBuffer src = ByteBuffer.wrap(content);
+            write(fileToWrite, position, src);
     }
 
     public void recovery() throws IOException {
@@ -59,52 +65,51 @@ public class AtomicFileWriter {
         });
     }
 
-    Path log(Path fileToWrite, int position, byte[] content) throws IOException {
+    Path log(Path fileToWrite, int position, ByteBuffer content) throws IOException {
         String logFile = String.valueOf(Math.abs(ThreadLocalRandom.current().nextLong()));
         Path path = dir.resolve(logFile);
-        SeekableByteChannel log = Files.newByteChannel(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        try(SeekableByteChannel log = Files.newByteChannel(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+            ByteBuffer finish = ByteBuffer.allocate(1);
+            // 初始化为0x00，0xff表示写入完成
+            byte b = 0x00;
+            finish.put(b).clear();
+            while (finish.hasRemaining()) {
+                log.write(finish);
+            }
 
-        ByteBuffer finish = ByteBuffer.allocate(1);
-        // 初始化为0x00，0xff表示写入完成
-        byte b = 0x00;
-        finish.put(b).clear();
-        while (finish.hasRemaining()) {
-            log.write(finish);
+            String fileName = fileToWrite.toAbsolutePath().toString();
+            ByteBuffer fileNameLenBuf = ByteBuffer.allocate(4).putInt(fileName.getBytes().length).clear();
+            while (fileNameLenBuf.hasRemaining()) {
+                log.write(fileNameLenBuf);
+            }
+
+            ByteBuffer fileNameBuf = ByteBuffer.wrap(fileName.getBytes());
+            while (fileNameBuf.hasRemaining()) {
+                log.write(fileNameBuf);
+            }
+
+            ByteBuffer positionBuf = ByteBuffer.allocate(4).putInt(position).clear();
+            while (positionBuf.hasRemaining()) {
+                log.write(positionBuf);
+            }
+
+            ByteBuffer contentLenBuf = ByteBuffer.allocate(4).putInt(content.remaining()).clear();
+            while (contentLenBuf.hasRemaining()) {
+                log.write(contentLenBuf);
+            }
+
+            while (content.hasRemaining()) {
+                log.write(content);
+            }
+
+            log.position(0);
+            finish.clear().put((byte) 0xff).clear();
+            while (finish.hasRemaining()) {
+                log.write(finish);
+            }
+
+            return path;
         }
-
-        String fileName = fileToWrite.toAbsolutePath().toString();
-        ByteBuffer fileNameLenBuf = ByteBuffer.allocate(4).putInt(fileName.getBytes().length).clear();
-        while (fileNameLenBuf.hasRemaining()) {
-            log.write(fileNameLenBuf);
-        }
-
-        ByteBuffer fileNameBuf = ByteBuffer.wrap(fileName.getBytes());
-        while (fileNameBuf.hasRemaining()) {
-            log.write(fileNameBuf);
-        }
-
-        ByteBuffer positionBuf = ByteBuffer.allocate(4).putInt(position).clear();
-        while (positionBuf.hasRemaining()) {
-            log.write(positionBuf);
-        }
-
-        ByteBuffer contentLenBuf = ByteBuffer.allocate(4).putInt(content.length).clear();
-        while (contentLenBuf.hasRemaining()) {
-            log.write(contentLenBuf);
-        }
-
-        ByteBuffer contentBuf = ByteBuffer.wrap(content);
-        while (contentBuf.hasRemaining()) {
-            log.write(contentBuf);
-        }
-
-        log.position(0);
-        finish.clear().put((byte) 0xff).clear();
-        while (finish.hasRemaining()) {
-            log.write(finish);
-        }
-
-        return path;
     }
 
     private void recovery0(Path log) throws IOException {

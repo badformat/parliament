@@ -25,14 +25,6 @@ public class Page {
         this.content = content;
     }
 
-    public synchronized void insertBytes(int i, byte[] src) {
-        byte[] newContent = new byte[content.length + src.length];
-        System.arraycopy(content, 0, newContent, 0, i);
-        System.arraycopy(src, 0, newContent, i, src.length);
-        System.arraycopy(content, i, newContent, i + src.length, content.length - i);
-        this.content = newContent;
-    }
-
     // include i. exclude j
     public synchronized void replaceBytes(int i, int j, byte[] src) {
         Preconditions.checkArgument(i < j);
@@ -45,11 +37,6 @@ public class Page {
             c++;
             i++;
         }
-    }
-
-    // include i. exclude j
-    public synchronized void copyBytes(int i, int j, byte[] dst) {
-        System.arraycopy(content, i, dst, 0, j - i);
     }
 
     public synchronized void updateContent(byte[] content) {

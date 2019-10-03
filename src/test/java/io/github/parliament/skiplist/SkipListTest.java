@@ -60,7 +60,7 @@ class SkipListTest {
         byte[] value = "value".getBytes();
         skipList.put(key, value);
 
-        SkipList.SkipListPage sp = skipList.getSkipListPages().get(0);
+        assertNotNull(skipList.getSkipListPages().get(0));
 
         Page page = pager.page(skipList.getStartPages()[0]);
 

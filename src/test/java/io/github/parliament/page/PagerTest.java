@@ -37,9 +37,9 @@ class PagerTest {
     @Test
     void getHeapOfPage() throws IOException {
         Pager pager = Pager.builder().path(path).build();
-        Pager.Heap heap = pager.allocateHeap(0);
+        Pager.Heap heap = pager.getOrCreateHeap(0);
         byte[] bytes = Files.readAllBytes(pager.getHeapPath(0));
-        assertEquals(bytes.length / 8, 8 * 1024 / (8 + 1024));
+        assertEquals(8 * 1024 / (8 + 1024), bytes.length / 8);
 
         ByteBuffer buf = ByteBuffer.wrap(bytes);
         int i = 0;
@@ -57,7 +57,7 @@ class PagerTest {
         Pager pager = Pager.builder().path(path).build();
         Page page = pager.allocate();
 
-        Pager.Heap heap = pager.allocateHeap(page.getNo());
+        Pager.Heap heap = pager.getOrCreateHeap(page.getNo());
 
         Pager.Head head = heap.getHead(page.getNo());
 

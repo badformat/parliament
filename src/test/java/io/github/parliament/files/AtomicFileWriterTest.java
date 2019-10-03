@@ -42,7 +42,7 @@ class AtomicFileWriterTest {
         Files.createFile(fileToWrite);
         int position = 0;
         byte[] content = "content".getBytes();
-        Path log = atomicFileWriter.log(fileToWrite, position, content);
+        Path log = atomicFileWriter.log(fileToWrite, position, ByteBuffer.wrap(content));
 
         assertNotNull(log);
         assertTrue(Files.exists(log));
@@ -132,7 +132,7 @@ class AtomicFileWriterTest {
         Files.createFile(fileToWrite);
         int position = 0;
         byte[] content = "write content".getBytes();
-        atomicFileWriter.log(fileToWrite, position, content);
+        atomicFileWriter.log(fileToWrite, position, ByteBuffer.wrap(content));
 
         atomicFileWriter.recovery();
 
