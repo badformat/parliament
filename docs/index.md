@@ -401,3 +401,148 @@ skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法
 解决了地址问题，该方案另一个问题是效率低下，无论查找和更新，都需要读取很多次磁盘，磁盘的读写时间比内存读写时间高三个数量级。
 
 ### Page管理
+每个node对应一个地址，空间上不太经济，1万个节点需要4万个字节。
+
+另外，大部分存储设备是以"块"（block）为读写单位的，块的大小常见有4K bytes、8K bytes等，文件系统一般以设备的块大小的整数倍为读写单位。
+
+同时，文件系统对单个文件的大小也有限制。
+
+结合以上分析，我们按文件系统的块大小为单位分配文件空间，一个块大小的空间称为page，每个page有一个唯一编号，使用heap（堆文件）管理page，heap文件可能有多个，
+在一个page上托管多个实际的skip list节点。
+
+每个heap文件的结构如下：
+```
+|------------------heads------------------------|---------pages-------|
+| page number (4字节) | page location (4字节)|.. | page | page |...|...|
+```
+
+#### 初始化
+第一次运行会运行pager的init方法，通过该方法指定heap存储目录、每个heap文件的最大字节数、每个page的字节数进行存储目录的初始化，
+在目录中使用metainf保存字节数信息，使用page_seq文件保存当前最大page编号，以便在进程重启时恢复page管理。
+
+#### page寻址及分配
+Pager的allocate方法首先使用空闲page的编号（从metainf尾部获取空闲page编号），没有空闲page则递增page_seq，获得一个新的page编号，
+通过page编号查找到对应的heap文件，如果heap文件不存在，则初始化，从heap文件构造一个Heap对象。
+
+Heap对象的头部heads成员将page编号映射为page在该heap文件的偏移地址，如page未分配，则偏移为-1。
+
+新建page从heap尾部分配，分配后更新head信息并持久化到heap文件。
+
+### skip list的查找
+一个page中包含多个skip list节点，为了提高读写速度，一般将page缓存到内存中，更新后，写回文件，这里使用weak reference的cache缓存page。
+
+skiplist.mf保存了每层首节点的编号，由SkipList.init方法进行初始化。
+
+page被加载到内存后，各个节点转换为JDK NavigableMap包含的条目，以便page中快速查找定位。
+skip list的上层节点和底层节点的值含义不同，上层节点的value表示下一个节点所在page的编号，底层节点的value表示真正保存的值。
+
+不管查询还是写入、删除，都需要先定位节点所在page页面，如查找某key在某层级的page，代码如下：
+```{.java}
+private SkipListPage findSkipListPageForKey(byte[] key, int lv) throws IOException, ExecutionException {
+    Preconditions.checkArgument(lv >= 0);
+    Preconditions.checkArgument(lv < SkipList.this.height);
+    int cursor = height - 1;
+    SkipListPage start = null;
+    SkipListPage up = null;
+    while (cursor >= lv) {
+        up = start;
+        if (start == null) {
+            start = skipListPages.get(startPages[cursor]);
+        }
+        SkipListPage slice = floorPage(start, key);
+
+        if (cursor == lv) {
+            return slice == null ? start : slice;
+        }
+        if (slice != null) {
+            Map.Entry<byte[], byte[]> e = slice.map.floorEntry(key);
+            int pn = ByteBuffer.wrap(e.getValue()).getInt();
+            start = skipListPages.get(pn);
+            start.setSuperPage(up);
+        } else {
+            start = null;
+        }
+
+        cursor--;
+    }
+
+    return start;
+}
+```
+这个方法还负责更新相关page的上一层page信息。
+
+floorPage从指定page开始查找拥有最后一个小于等于待查找值的key所在的page，实现如下：
+```{.java}
+private SkipListPage floorPage(SkipListPage start, byte[] key) throws ExecutionException {
+    SkipListPage current = start;
+    SkipListPage floor = null;
+    while (current != null) {
+        Map.Entry<byte[], byte[]> entry = current.map.floorEntry(key);
+        if (entry != null) {
+            // 只是在本page发现小于key的记录，还需检查下一页。
+            floor = current;
+        }
+
+        if (current.getRightPageNo() > 0) {
+            int pn = current.getRightPageNo();
+            current = skipListPages.get(pn);
+        } else {
+            current = null;
+        }
+    }
+    return floor;
+}
+```
+注意，如果在该page对应map未找到大于查找值的记录，还需要到下一个page查找。
+
+### skip list的更新
+更新一个节点前，先使用以上方法查找、加载待插入的page，更新相关map，再使用SkipListPage.update更新文件，代码如下：
+```{.java}
+private void update() throws IOException, ExecutionException {
+    int s = HEAD_SIZE_IN_PAGE;
+    int k = 0;
+
+    for (byte[] key : map.keySet()) {
+        s += key.length;
+        s += 4;
+        s += map.get(key).length;
+        if (isLeaf) {
+            s += 4;
+        }
+        k++;
+    }
+    size = s;
+    keys = k;
+    if (keys == 0) {
+        pager.recycle(page);
+    }
+
+    if (remaining() < 0) {
+        split();
+    } else {
+        sync();
+    }
+}
+```
+
+如上缩减，如果page不在包含数据，则回收，如数据已超过page大小，则分裂page，分裂方法为分配一个page，并将除头节点以外的节点存储到新page即可。
+```{.java}
+private void split() throws IOException, ExecutionException {
+    Preconditions.checkState(this.keys > 0);
+    Preconditions.checkState(!map.isEmpty());
+    Page p = SkipList.this.allocatePage(level);
+    SkipListPage newPage = skipListPages.get(p.getNo());
+
+    newPage.map = new ConcurrentSkipListMap<>(map.tailMap(map.firstKey(), false));
+    Preconditions.checkState(!map.isEmpty());
+    map = new ConcurrentSkipListMap<>(map.headMap(map.firstKey(), true));
+    newPage.rightPageNo = this.rightPageNo;
+    this.rightPageNo = newPage.getPage().getNo();
+
+    this.update();
+    newPage.update();
+
+    Preconditions.checkState(pager.getPageSize() - this.getSize() >= 0);
+    Preconditions.checkState(pager.getPageSize() - newPage.getSize() >= 0);
+}
+```

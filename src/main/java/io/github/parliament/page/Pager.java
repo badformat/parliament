@@ -16,27 +16,17 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 /**
- * {@link Page}管理器，负责在在{@link Heap}中分配、获取、回收一块文件page页面。
- * <p>
+ * {@link Page}管理器，负责在{@link Heap}文件中分配、获取、回收一块文件page页面。
  * {@link Page}是在某个{@link Heap}文件中的一块地址，每个Page都有独立的编号。
- * <p>
- * 4g file, 65536个64k
- * <p>
- * x个page
- * x*8 + x*64*1024 = 4*1024*1024*1024
- * x*65544 = 4294967296
- * x = 65528.00009764
- * <p>
- * heap:
- * seq: 2byte
- * heads: head[x]
- * pages: page[x]
- * <p>
- * head:
- * page no: 2 byte
- * page location: 4 byte
- * <p>
- * | seq(2 byte) | page no (2 byte) | page location (4 byte) | ... | page | page |
+ *
+ * 一个heap文件由heads和pages两部分组成，head保存了该堆文件所有page的编号和对应的地址信息。
+ * head的个数由page大小决定。
+ *
+ * heap文件格式如下：
+ * <pre>
+ * |------------------head---------------------|---------pages-------|
+ * | page no (4字节) | page location (4字节)|.. | page | page |...|...|
+ * </pre>
  */
 public class Pager {
     public static final int MAX_HEAP_SIZE = 1024 * 1024 * 1024;
@@ -109,7 +99,7 @@ public class Pager {
             Preconditions.checkState(head != null);
             int location = head.getLocation();
             Preconditions.checkState(location == -1);
-            allocateSpaceFor(head);
+            allocateSpaceForPage(head);
 
             byte[] bytes = pageContent(head.location);
             return Page.builder().no(pn).location(head.location).content(bytes).build();
@@ -132,7 +122,7 @@ public class Pager {
             }
         }
 
-        private void allocateSpaceFor(Head head) throws IOException {
+        private void allocateSpaceForPage(Head head) throws IOException {
             int location = (int) Files.size(heapPath);
 
             ByteBuffer buf = ByteBuffer.allocate(pageSize);
@@ -255,9 +245,41 @@ public class Pager {
     }
 
     public Page allocate() throws IOException {
-        int pn = getAndIncrement();
-        Heap heap = getOrCreateHeap(pn);
-        return heap.allocate(pn);
+        int pn;
+        long size;
+        synchronized (METAINF_FILENAME) {
+            size = Files.size(path.resolve(METAINF_FILENAME));
+        }
+
+        if (size > 8) {
+            synchronized (METAINF_FILENAME) {
+                try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(METAINF_FILENAME),
+                        StandardOpenOption.WRITE, StandardOpenOption.READ)) {
+                    chn.position(size - 4);
+                    ByteBuffer dst = ByteBuffer.allocate(4);
+                    int read = 0;
+                    while (read != -1 && dst.hasRemaining()) {
+                        read = chn.read(dst);
+                    }
+                    pn = dst.flip().getInt();
+                    chn.truncate(size - 4);
+                }
+            }
+            Heap heap = getOrCreateHeap(pn);
+            return heap.page(pn);
+        } else {
+            pn = getAndIncrement();
+            Heap heap = getOrCreateHeap(pn);
+            return heap.allocate(pn);
+        }
+    }
+
+    public void recycle(Page page) throws IOException {
+        synchronized (METAINF_FILENAME) {
+            long position = Files.size(path.resolve(METAINF_FILENAME));
+            atomicFileWriter.write(path.resolve(METAINF_FILENAME), position,
+                    ByteBuffer.allocate(4).putInt(page.getNo()).flip());
+        }
     }
 
     public void sync(Page page) throws IOException {
@@ -265,18 +287,20 @@ public class Pager {
         heap.sync(page);
     }
 
-    private synchronized int getAndIncrement() throws IOException {
-        int i;
-        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_SEQ_FILENAME), StandardOpenOption.READ)) {
-            ByteBuffer dst = ByteBuffer.allocate(4);
-            int read = 0;
-            while (read != -1 && dst.hasRemaining()) {
-                read = chn.read(dst);
+    private int getAndIncrement() throws IOException {
+        synchronized (PAGE_SEQ_FILENAME) {
+            int i;
+            try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_SEQ_FILENAME), StandardOpenOption.READ)) {
+                ByteBuffer dst = ByteBuffer.allocate(4);
+                int read = 0;
+                while (read != -1 && dst.hasRemaining()) {
+                    read = chn.read(dst);
+                }
+                i = dst.flip().getInt();
             }
-            i = dst.flip().getInt();
+            atomicFileWriter.write(path.resolve(PAGE_SEQ_FILENAME), 0, ByteBuffer.allocate(4).putInt(i + 1).clear());
+            return i;
         }
-        atomicFileWriter.write(path.resolve(PAGE_SEQ_FILENAME), 0, ByteBuffer.allocate(4).putInt(i + 1).clear());
-        return i;
     }
 
     private Heap heap(int pageNo) throws IOException {

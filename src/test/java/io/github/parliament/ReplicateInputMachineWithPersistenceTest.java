@@ -36,7 +36,7 @@ class ReplicateInputMachineWithPersistenceTest {
     }
 
     static private ReplicateStateMachine create(String dir) throws Exception {
-        Pager.init(tempDir, 64 * 1024, 16 * 1024);
+        Pager.init(tempDir, 64 * 1024, 4 * 1024);
         Pager pager = Pager.builder().path(tempDir).build();
 
         SkipList.init(tempDir, 6, pager);

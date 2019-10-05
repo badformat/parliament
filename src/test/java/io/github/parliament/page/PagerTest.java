@@ -9,6 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.*;
@@ -77,5 +79,50 @@ class PagerTest {
                 fail(e);
             }
         });
+    }
+
+    @Test
+    void recycle() throws IOException {
+        Pager pager = Pager.builder().path(path).build();
+        Page page = pager.allocate();
+        pager.recycle(page);
+        assertEquals(12, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+
+        pager.allocate();
+        assertEquals(8, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+    }
+
+    @Test
+    void repeatAllocateAndRecycle() throws IOException {
+        Pager pager = Pager.builder().path(path).build();
+
+        List<Page> pages = Stream.iterate(0, i -> i + 1).limit(2000).map(i -> {
+            try {
+                return pager.allocate();
+            } catch (IOException e) {
+                fail(e);
+                return null;
+            }
+        }).collect(Collectors.toList());
+
+        pages.forEach(page -> {
+            try {
+                pager.recycle(page);
+            } catch (IOException e) {
+                fail(e);
+            }
+        });
+
+        assertEquals(8008, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+
+        pages.forEach(page -> {
+            try {
+                pager.allocate();
+            } catch (IOException e) {
+                fail(e);
+            }
+        });
+
+        assertEquals(8, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
     }
 }

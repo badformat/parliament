@@ -29,7 +29,7 @@ public class AtomicFileWriter {
         Files.createDirectories(dir);
     }
 
-    public void write(Path fileToWrite, int position, ByteBuffer content) throws IOException {
+    public void write(Path fileToWrite, long position, ByteBuffer content) throws IOException {
         Preconditions.checkArgument(!fileToWrite.toAbsolutePath().startsWith(dir.toAbsolutePath()), "Can't write file in log directory");
 
         content.mark();
@@ -46,7 +46,7 @@ public class AtomicFileWriter {
         Files.delete(log);
     }
 
-    public void write(Path fileToWrite, int position, byte[] content) throws IOException {
+    public void write(Path fileToWrite, long position, byte[] content) throws IOException {
             ByteBuffer src = ByteBuffer.wrap(content);
             write(fileToWrite, position, src);
     }
@@ -65,7 +65,7 @@ public class AtomicFileWriter {
         });
     }
 
-    Path log(Path fileToWrite, int position, ByteBuffer content) throws IOException {
+    Path log(Path fileToWrite, long position, ByteBuffer content) throws IOException {
         String logFile = String.valueOf(Math.abs(ThreadLocalRandom.current().nextLong()));
         Path path = dir.resolve(logFile);
         try(SeekableByteChannel log = Files.newByteChannel(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
@@ -88,7 +88,7 @@ public class AtomicFileWriter {
                 log.write(fileNameBuf);
             }
 
-            ByteBuffer positionBuf = ByteBuffer.allocate(4).putInt(position).clear();
+            ByteBuffer positionBuf = ByteBuffer.allocate(8).putLong(position).clear();
             while (positionBuf.hasRemaining()) {
                 log.write(positionBuf);
             }
@@ -135,7 +135,7 @@ public class AtomicFileWriter {
             }
             fileName.flip();
 
-            ByteBuffer pos = ByteBuffer.allocate(4);
+            ByteBuffer pos = ByteBuffer.allocate(8);
             while (pos.hasRemaining()) {
                 chn.read(pos);
             }
@@ -159,7 +159,7 @@ public class AtomicFileWriter {
             byte[] dst = new byte[fileName.capacity()];
             fileName.get(dst);
             try (SeekableByteChannel f = Files.newByteChannel(Paths.get(new String(dst)), StandardOpenOption.WRITE)) {
-                f.position(pos.getInt());
+                f.position(pos.getLong());
                 ByteBuffer src = ByteBuffer.wrap(content);
                 while (src.hasRemaining()) {
                     f.write(src);

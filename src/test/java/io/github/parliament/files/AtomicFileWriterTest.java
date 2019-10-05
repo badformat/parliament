@@ -72,12 +72,12 @@ class AtomicFileWriterTest {
             fileName.get(dst);
             assertEquals(fileToWrite.toAbsolutePath().toString(), new String(dst));
 
-            ByteBuffer pos = ByteBuffer.allocate(4);
+            ByteBuffer pos = ByteBuffer.allocate(8);
             while (pos.hasRemaining()) {
                 chn.read(pos);
             }
             pos.flip();
-            assertEquals(pos.getInt(), position);
+            assertEquals(pos.getLong(), position);
 
             ByteBuffer contentLen = ByteBuffer.allocate(4);
             while (contentLen.hasRemaining()) {

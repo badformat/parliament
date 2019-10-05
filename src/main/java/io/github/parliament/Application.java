@@ -48,7 +48,7 @@ public class Application {
         @NonNull InetLearner leaner = InetLearner.create(connectionPool, peers);
 
         Path rsmPath = Paths.get(dir).resolve("rsm");
-        Pager.init(rsmPath, Pager.MAX_HEAP_SIZE, 64 * 1024);
+        Pager.init(rsmPath, Pager.MAX_HEAP_SIZE, 4 * 1024);
         @NonNull Pager rsmPager = Pager.builder().path(rsmPath).build();
 
         SkipList.init(rsmPath, 6, rsmPager);
@@ -77,7 +77,7 @@ public class Application {
                 .build();
 
         Path dbPath = Paths.get(dir).resolve("db");
-        Pager.init(dbPath, Pager.MAX_HEAP_SIZE, 64 * 1024);
+        Pager.init(dbPath, Pager.MAX_HEAP_SIZE, 4 * 1024);
         @NonNull Pager dbpager = Pager.builder().path(dbPath).build();
         SkipList.init(dbPath, 6, dbpager);
         @NonNull SkipList dbSkipList = SkipList.builder().pager(dbpager).path(dbPath).build();

@@ -227,8 +227,11 @@ public class SkipList implements Persistence {
             }
             size = s;
             keys = k;
+            if (keys == 0) {
+                pager.recycle(page);
+            }
 
-            if (leftSize() < 0) {
+            if (remaining() < 0) {
                 // check left size
                 // allocate a new page and insert it into list
                 split();
@@ -237,7 +240,7 @@ public class SkipList implements Persistence {
             }
         }
 
-        private int leftSize() {
+        private int remaining() {
             return pager.getPageSize() - this.getSize();
         }
 
@@ -446,7 +449,7 @@ public class SkipList implements Persistence {
     }
 
     /**
-     * 从指定page开始查找最后一个小于等于lookup的key对应的page
+     * 从指定page开始查找拥有最后一个小于等于待查找值的key所在的page
      *
      * @param start
      * @param key
@@ -455,12 +458,12 @@ public class SkipList implements Persistence {
      */
     private SkipListPage floorPage(SkipListPage start, byte[] key) throws ExecutionException {
         SkipListPage current = start;
-        SkipListPage found = null;
+        SkipListPage floor = null;
         while (current != null) {
             Map.Entry<byte[], byte[]> entry = current.map.floorEntry(key);
             if (entry != null) {
                 // 只是在本page发现小于key的记录，还需检查下一页。
-                found = current;
+                floor = current;
             }
 
             if (current.getRightPageNo() > 0) {
@@ -470,7 +473,7 @@ public class SkipList implements Persistence {
                 current = null;
             }
         }
-        return found;
+        return floor;
     }
 
     private Page allocatePage(int level) throws IOException {
