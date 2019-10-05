@@ -27,13 +27,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * ## skip list in page,ascending order
- * <p>
- * level > 0:
- * | meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | next level page no (4 bytes) | key len | key | next level page no | ...
- * <p>
- * level 0:
- * | meta (1 byte) | right page number (4 bytes)| number of keys (4 bytes)| key len (4 bytes) | key | value len (4 bytes) | value | ...
+ * skip list持久化实现。
  */
 public class SkipList implements Persistence {
     private static final Logger logger = LoggerFactory.getLogger(SkipList.class);
@@ -453,8 +447,7 @@ public class SkipList implements Persistence {
      *
      * @param start
      * @param key
-     * @return
-     * @throws IOException
+     * @return skip list page页面
      */
     private SkipListPage floorPage(SkipListPage start, byte[] key) throws ExecutionException {
         SkipListPage current = start;
