@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>分布式系统入门：以实现一个分布式缓存为例</title>
+  <title>分布式系统实践入门：以实现一个分布式键值服务为例</title>
   <style>
       code{white-space: pre-wrap;}
       span.smallcaps{font-variant: small-caps;}
@@ -83,95 +83,276 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <body>
 <nav id="TOC" role="doc-toc">
 <ul>
-<li><a href="#分布式系统入门以实现一个分布式缓存为例">分布式系统入门：以实现一个分布式缓存为例</a><ul>
-<li><a href="#系统功能简介">系统功能简介</a></li>
+<li><a href="#分布式系统实践入门以实现一个分布式键值服务为例">分布式系统实践入门：以实现一个分布式键值服务为例</a><ul>
+<li><a href="#系统功能">系统功能</a></li>
 <li><a href="#接收请求">接收请求</a><ul>
 <li><a href="#java-nio的使用">JAVA NIO的使用</a></li>
 <li><a href="#网络协议的解析构造">网络协议的解析构造</a></li>
 </ul></li>
-<li><a href="#解决一致性问题">解决一致性问题</a><ul>
-<li><a href="#复制状态机">复制状态机</a></li>
-<li><a href="#全序广播原子广播及共识">全序广播（原子广播）及共识</a></li>
-<li><a href="#paxos共识算法">paxos共识算法</a></li>
+<li><a href="#键值命令实现">键值命令实现</a><ul>
+<li><a href="#skip-list的持久化实现">skip list的持久化实现</a></li>
+<li><a href="#page管理">Page管理</a></li>
+<li><a href="#skiplist的查找">SkipList的查找</a></li>
+<li><a href="#skiplist的更新">SkipList的更新</a></li>
 </ul></li>
+<li><a href="#容错与高可用">容错与高可用</a><ul>
+<li><a href="#主从同步">主从同步</a></li>
+<li><a href="#正确性与一致性模型">正确性与一致性模型</a></li>
+</ul></li>
+<li><a href="#使用分布式事务保证顺序一致性">使用分布式事务保证顺序一致性</a><ul>
+<li><a href="#分布式事务的局限">分布式事务的局限</a></li>
+<li><a href="#分布式事务和分布式一致性模型的关系">分布式事务和分布式一致性模型的关系</a></li>
+</ul></li>
+<li><a href="#复制状态机">复制状态机</a><ul>
+<li><a href="#全序广播原子广播">全序广播（原子广播）</a></li>
+<li><a href="#共识">共识</a></li>
+</ul></li>
+<li><a href="#理解paxos共识算法">理解Paxos共识算法</a></li>
 <li><a href="#实现复制状态机">实现复制状态机</a></li>
 <li><a href="#实现paxos共识算法">实现Paxos共识算法</a><ul>
 <li><a href="#正确性保证">正确性保证</a></li>
 </ul></li>
-<li><a href="#持久化">持久化</a><ul>
-<li><a href="#skip-list算法">skip list算法</a></li>
-<li><a href="#skip-list的持久化实现">skip list的持久化实现</a></li>
-<li><a href="#page管理">Page管理</a></li>
-<li><a href="#skip-list的查找">skip list的查找</a></li>
-<li><a href="#skip-list的更新">skip list的更新</a></li>
-</ul></li>
+<li><a href="#总结">总结</a></li>
 </ul></li>
 </ul>
 </nav>
-<h1 id="分布式系统入门以实现一个分布式缓存为例">分布式系统入门：以实现一个分布式缓存为例</h1>
-<p>如果你做过稍微复杂一点的系统，或多或少都知道一些关于分布式的概念或名词，比如： - 副本 - 高可用，容错 - 两阶段提交 - 三阶段提交 - 幂等 - 同步系统，异步系统 - 网裂 - CAP理论 - 拜占庭问题 - 协同攻击问题 - FLP理论 - 各种一致性保证：最终一致、因果一致、顺序一致 - 复制状态机 - 逻辑时钟 - 原子广播 - 共识及Paxos、Raft、Zab算法</p>
-<p>但是对以下问题，可能只存在一些感性认识： - 为什么需要分布式？ - 分布式系统设计存在哪些取舍？ - 不同分布式系统的理论限制有哪些？ - 各种一致性模型的区别是什么？对系统有何影响？ - 分布式事务和一致性的关系是什么？和共识的关系又是什么？</p>
-<p>对于需要工程实践经验的工程师来说，最重要的问题是： &gt;实现一个分布式系统，究竟有哪些难点和相应的解决思路？</p>
-<p>本文是作者通过实现一个分布式缓存，对以上部分问题进行的一次梳理，和大家共同交流。正所谓：</p>
-<pre><code>“What I cannot create, I do not understand.” – Richard Feynman</code></pre>
-<p>项目源码及构建、运行方式请参看<a href="https://github.com/z42y/parliament/">项目主页</a>，同时提供了<a href="./javadoc/index.html">javadoc参考</a></p>
-<h2 id="系统功能简介">系统功能简介</h2>
-<p>该缓存服务除了实现常见的“put <em>key</em> <em>value</em>”、“get <em>key</em>”、“del <em>key0</em> [<em>key1</em> …]”操作， 还实现了按范围取值的命令“range <em>begin</em> <em>end</em>”，其中begin和end为开始、结束key值，字典序排序。</p>
-<p>使用redis的resp协议进行通信，可以直接使用redis-cli连接测试，或者redis客户端库进行操作。</p>
-<p>为了容错，允许用户使用多台机器同时提供服务，避免单点故障。当客户端发现某个服务地址不可用时，可以连接到另一个地址进行服务请求。</p>
-<p>使用多台机器需要解决<a href="https://zh.wikipedia.org/wiki/%E5%86%85%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E6%A8%A1%E5%9E%8B">一致性模型</a>问题。</p>
-<p>这个服务保证<strong>线性一致性</strong>，对客户端来说，无论该系统有多少台机器，都和操作一台机器的效果一样。</p>
-<p>反过来说，非线性一致的系统，对同一个key，在某段时间出现不同客户端读到不同的值，或者多次读的结果，其顺序与更新的顺序不一致， 比如某key先后被更新为a、b、c，某客户端在某时间三次读取的结果依次为b、c、a，而且另一个客户端三次读取的结果可能依次为c、b、a。</p>
-<p>如果满足线性一致性，服务可以安全的用做leader选举、唯一值广播、分布式锁服务等。</p>
-<p>例如：</p>
+<h1 id="分布式系统实践入门以实现一个分布式键值服务为例">分布式系统实践入门：以实现一个分布式键值服务为例</h1>
+<blockquote>
+<p>“What I cannot create, I do not understand.” – Richard Feynman</p>
+</blockquote>
+<p>🚧Notice：文档基本完成，各种细节在完善中。</p>
+<p>如果你做过稍微复杂一点的系统，或多或少都知道一些关于分布式的概念或名词，比如：</p>
 <ul>
-<li>leader选举：put leader ‘my ip’，无论多少个客户端并发写入leader，只会成功一个，其余客户端会返回put失败。</li>
-<li>用户昵称绑定：put ‘a nickname’ ‘user id’, 某个昵称（‘a nickname’）在全局只会被赋予唯一一个user id。</li>
+<li>副本</li>
+<li>高可用，容错</li>
+<li>两阶段提交、三阶段提交</li>
+<li>幂等</li>
+<li>同步系统、异步系统</li>
+<li>网裂</li>
+<li>CAP理论</li>
+<li>拜占庭问题</li>
+<li>协同攻击问题</li>
+<li>FLP理论</li>
+<li>各种一致性保证：最终一致、因果一致、顺序一致</li>
+<li>复制状态机</li>
+<li>逻辑时钟</li>
+<li>原子广播</li>
+<li>共识及Paxos、Raft、Zab算法</li>
 </ul>
+<p>对于需要工程实践经验的工程师来说，最重要的问题是：<strong>实现一个分布式系统，究竟有哪些挑战和应对手段？</strong></p>
+<p>出于这样的好奇，作者通过实现一个分布式键值服务，对分布式系统的理论落地、实现难点有了更深认识， 最后总结出此文，覆盖了网络实现、存储实现、paxos算法理解、一致性模型、副本实现等内容。</p>
+<p>项目源码及构建、运行方式请参看👉 ：<a href="https://github.com/z42y/parliament/">项目主页</a>，同时提供了<a href="./javadoc/index.html">javadoc参考</a>。</p>
+<p>欢迎提issue！🚀</p>
+<h2 id="系统功能">系统功能</h2>
+<p>该服务除了实现常见的“put <em>key</em> <em>value</em>”、“get <em>key</em>”、“del <em>key0</em> [<em>key1</em> …]”操作， 还实现了按范围取值的命令“range <em>begin</em> <em>end</em>”，其中begin和end为开始、结束key值，字典序排序。</p>
+<p>服务使用redis的resp协议进行通信，可以直接使用redis-cli等客户端连接测试，或者使用redis客户端库进行操作。</p>
 <h2 id="接收请求">接收请求</h2>
-<p>因为redis的网络协议、客户端和库已经非常流行了，项目采用redis协议提供服务。</p>
+<p>提供服务的第一步是接受、解析客户端通过网络发送的命令请求，使用JAVA NIO处理。</p>
 <h3 id="java-nio的使用">JAVA NIO的使用</h3>
-<p>首先使用NIO接收客户连接，在连接成功的channel上挂载一个<a href="./javadoc/io/github/parliament/resp/RespReadHandler.html">RespReadHandler</a>类， 使用<a href="./javadoc/io/github/parliament/resp/RespDecoder.html">RespDecoder</a>类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断是否解码完成。</p>
-<p>解码完成后，使用<a href="./javadoc/io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>进行真正的缓存读写处理，</p>
-<p>处理完成后，新建一个<a href="./javadoc/io/github/parliament/resp/RespWriteHandler.html">RespWriteHandler</a>将结果返回给客户端， 接着重新挂载一个RespReadHandler进行下一个请求处理。</p>
+<p>首先打开socket接收客户连接，在连接成功的channel上挂载一个<a href="./javadoc/io/github/parliament/resp/RespReadHandler.html">RespReadHandler</a>类， 使用<a href="./javadoc/io/github/parliament/resp/RespDecoder.html">RespDecoder</a>类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断是否解码完成。</p>
+<p>解码完成后，使用<a href="./javadoc/io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>进行真正的键值读写处理，此处先不考虑KeyvalueEngine的实现细节。</p>
+<p>执行完客户端命令后，ReadHandler新建一个<a href="./javadoc/io/github/parliament/resp/RespWriteHandler.html">RespWriteHandler</a>将结果返回给客户端， 接着重新挂载一个RespReadHandler进行下一个请求处理。</p>
 <p>重新生成RespWriterHandler和RespReadHandler是为了方便进行GC，当然可以手工管理各种buffer的回收和重利用，这里不做详细设计了。</p>
-<p>因为缓存的对象都比较小，<a href="./javadoc/io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>并没有使用InputStream之类的模式进一步提升异步性能。</p>
+<p>因为保存的对象都比较小，<a href="./javadoc/io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>并没有使用InputStream之类的模式进一步提升异步性能。</p>
 <h3 id="网络协议的解析构造">网络协议的解析构造</h3>
 <p><a href="./javadoc/io/github/parliament/resp/RespDecoder.html">RespDecoder</a>是redis的<a href="https://redis.io/topics/protocol">RESP协议</a>解码器， RESP一共有以下几种数据类型： - SIMPLE_STRING 字符串 - ERROR 错误字符串 - INTEGER 整数 - BULK_STRING 二进制字节组 - ARRAY 数组</p>
 <p>除了ARRAY可以包含其他类型和其他ARRAY，处理稍稍麻烦外，其他类型都容易解析。</p>
 <p>使用JAVA标准库中ByteBuffer类直接解析协议是比较困难的，因为报文的写入和读取是并发的，不可能等到报文读取完成后，才开始解析， 甚至无法知道报文什么时候结束。</p>
 <p>另外，报文处理往往需要“回溯”操作，从之前某个位置重新开始解析。使用ByteBuffer的flip和rewind、reset太底层，抽象层次不够。</p>
 <p>所以通过实现自己的<a href="./javadoc/io/github/parliament/resp/ByteBuf.html">ByteBuf</a>进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短、数据量都小，无法体现其优势。</p>
-<h2 id="解决一致性问题">解决一致性问题</h2>
-<p>前面说到服务需要保证线性一致，如果<a href="./javadoc/io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>直接对key-value进行读写，将会导致不一致的问题。</p>
-<p>举个简单的例子：</p>
+<h2 id="键值命令实现">键值命令实现</h2>
+<p>收到请求后，需要执行GET和PUT、DEL、RANGE操作，这些操作都是典型的有序Map方法，比如JDK中的<a href="https://docs.oracle.com/javase/9/docs/api/java/util/NavigableMap.html">NavigableMap接口</a>， 其并发实现<a href="https://docs.oracle.com/javase/9/docs/api/java/util/concurrent/ConcurrentSkipListMap.html">ConcurrentSkipListMap</a>采用了skip list算法， 本应用也采用该算法。</p>
+<p>skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法说明见<a href="https://zh.wikipedia.org/wiki/%E8%B7%B3%E8%B7%83%E5%88%97%E8%A1%A8">wikipedia</a>。 该算法通过维护多层链表，依次快速接近查找目标。</p>
+<p>演示（来自Wikipedia）：</p>
+<figure>
+<img src="./skiplist.gif" alt="" /><figcaption>skip list</figcaption>
+</figure>
+<h3 id="skip-list的持久化实现">skip list的持久化实现</h3>
+<p>在内存中实现skip list的数据结构非常简单，使用文件接口的持久化实现则需要考虑很多细节，这里的实现不考虑并发。</p>
+<p>首先需要考虑如何使用文件表示链表结构，每个节点需要知道下一个节点位置， 对于内存实现的skip list，编程语言的指针或引用处理起来非常自然，使用文件实现，我们需要手工分配和管理节点在文件中的地址和存储。</p>
+<p>以skip list的插入操作为例，一种简要的步骤如下： - 获得最上层链表的头节点的文件名称和位置信息，文件名和位置信息可以记录在其他元信息文件中。 - 获得头节点的key值，与参数key比较，以决定继续查找同层下一个节点还是进入下一层链表。 - 节点中key的长度不是固定的，文件中需要区分key值、地址内容，可以使用某固定字段保存key长度，以便程序快速定位。 - 到达底层节点后，寻找插入位置。 - 底层节点需要保存key对应的value值，可以保存在节点中（同样需要使用某个固定字段保存value长度），也可以保存在其他地方，使用地址进行查找，但这样会多一次磁盘寻址操作。 - 待插入位置可能在链表中间，文件接口没有insert之类的操作，为了后续节点不被覆盖，需依次拷贝后续节点到文件中的新位置。 - 更改节点位置后，需要更新相关节点保存的该节点的位置信息。</p>
+<p>可以看到，按照文件物理位置进行地址管理，维护位置信息非常麻烦，我们希望新节点的分配不会改变原有节点的物理位置， 同时希望即便更新了相关节点的物理位置后，不用更改其他节点对该节点的引用。</p>
+<p>参考内存管理中不同进程共享相同地址空间的方式，采用一个映射表，对每个节点分配一个唯一编号表示虚拟地址，在映射表中保存该虚拟地址的文件物理位置。 这样，在文件中移动节点后，只需更新映射表中该节点的映射信息。分配新空间时，也不用按照逻辑位置决定物理空间的位置。</p>
+<p>解决了地址问题，该方案另一个问题是效率低下，无论查找和更新，都需要读取很多次磁盘，磁盘的读写时间比内存读写时间高三个数量级。</p>
+<p>每个node对应一个地址，空间上不太经济，1万个节点至少需要8万个字节的映射空间（编号+地址）。</p>
+<p>另外，大部分存储设备是以“块”（block）为读写单位的，块的大小常见有4K bytes、8K bytes等，文件系统一般以设备的块大小的整数倍为读写单位。 单个node的文件读写无法发挥块设备的性能优势。</p>
+<p>同时，文件系统对单个文件的大小也有限制。</p>
+<h3 id="page管理">Page管理</h3>
+<p>结合以上分析，我们按文件系统的块大小为单位分配文件空间，一个块大小的空间称为page，每个page有一个唯一编号，使用heap（堆文件）管理page，heap文件可能有多个， 在一个page上托管多个实际的skip list节点。</p>
+<p>每个heap文件的结构如下：</p>
+<pre><code>|------------------heads------------------------|---------pages-------|
+| page number (4字节) | page location (4字节)|.. | page | page |...|...|</code></pre>
+<h4 id="初始化">初始化</h4>
+<p>第一次运行会运行pager的init方法，通过该方法指定heap存储目录、每个heap文件的最大字节数、每个page的字节数进行存储目录的初始化， 在目录中使用metainf保存字节数信息，使用page_seq文件保存当前最大page编号，以便在进程重启时恢复page管理。</p>
+<h4 id="page寻址及分配">Page寻址及分配</h4>
+<p>Pager的allocate方法首先使用空闲page的编号（从metainf尾部获取空闲page编号），没有空闲page则递增page_seq，获得一个新的page编号， 通过page编号查找到对应的heap文件，如果heap文件不存在，则初始化，从heap文件构造一个Heap对象。</p>
+<p>Heap对象的头部heads成员将page编号映射为page在该heap文件的偏移地址，如page未分配，则偏移为-1。</p>
+<p>新建page从heap尾部分配，分配后更新head信息并持久化到heap文件。</p>
+<h3 id="skiplist的查找">SkipList的查找</h3>
+<p>一个page中包含多个skip list节点，为了提高读写速度，一般将page缓存到内存中，更新后，写回文件，这里使用weak reference的cache缓存page。</p>
+<p>skiplist.mf保存了每层首节点的编号，由SkipList.init方法进行初始化。</p>
+<p>page被加载到内存后，各个节点转换为JDK NavigableMap包含的条目，以便page中快速查找定位。 skip list的上层节点和底层节点的值含义不同，上层节点的value表示下一个节点所在page的编号，底层节点的value表示真正保存的值。</p>
+<p>不管查询还是写入、删除，都需要先定位节点所在page页面，如查找某key在某层级的page，代码如下：</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">private</span> SkipListPage <span class="fu">findSkipListPageForKey</span>(<span class="dt">byte</span>[] key, <span class="dt">int</span> lv) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
+<span id="cb2-2"><a href="#cb2-2"></a>    Preconditions.<span class="fu">checkArgument</span>(lv &gt;= <span class="dv">0</span>);</span>
+<span id="cb2-3"><a href="#cb2-3"></a>    Preconditions.<span class="fu">checkArgument</span>(lv &lt; SkipList.<span class="fu">this</span>.<span class="fu">height</span>);</span>
+<span id="cb2-4"><a href="#cb2-4"></a>    <span class="dt">int</span> cursor = height - <span class="dv">1</span>;</span>
+<span id="cb2-5"><a href="#cb2-5"></a>    SkipListPage start = <span class="kw">null</span>;</span>
+<span id="cb2-6"><a href="#cb2-6"></a>    SkipListPage up = <span class="kw">null</span>;</span>
+<span id="cb2-7"><a href="#cb2-7"></a>    <span class="kw">while</span> (cursor &gt;= lv) {</span>
+<span id="cb2-8"><a href="#cb2-8"></a>        up = start;</span>
+<span id="cb2-9"><a href="#cb2-9"></a>        <span class="kw">if</span> (start == <span class="kw">null</span>) {</span>
+<span id="cb2-10"><a href="#cb2-10"></a>            start = skipListPages.<span class="fu">get</span>(startPages[cursor]);</span>
+<span id="cb2-11"><a href="#cb2-11"></a>        }</span>
+<span id="cb2-12"><a href="#cb2-12"></a>        SkipListPage slice = <span class="fu">floorPage</span>(start, key);</span>
+<span id="cb2-13"><a href="#cb2-13"></a></span>
+<span id="cb2-14"><a href="#cb2-14"></a>        <span class="kw">if</span> (cursor == lv) {</span>
+<span id="cb2-15"><a href="#cb2-15"></a>            <span class="kw">return</span> slice == <span class="kw">null</span> ? start : slice;</span>
+<span id="cb2-16"><a href="#cb2-16"></a>        }</span>
+<span id="cb2-17"><a href="#cb2-17"></a>        <span class="kw">if</span> (slice != <span class="kw">null</span>) {</span>
+<span id="cb2-18"><a href="#cb2-18"></a>            <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; e = slice.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</span>
+<span id="cb2-19"><a href="#cb2-19"></a>            <span class="dt">int</span> pn = <span class="bu">ByteBuffer</span>.<span class="fu">wrap</span>(e.<span class="fu">getValue</span>()).<span class="fu">getInt</span>();</span>
+<span id="cb2-20"><a href="#cb2-20"></a>            start = skipListPages.<span class="fu">get</span>(pn);</span>
+<span id="cb2-21"><a href="#cb2-21"></a>            start.<span class="fu">setSuperPage</span>(up);</span>
+<span id="cb2-22"><a href="#cb2-22"></a>        } <span class="kw">else</span> {</span>
+<span id="cb2-23"><a href="#cb2-23"></a>            start = <span class="kw">null</span>;</span>
+<span id="cb2-24"><a href="#cb2-24"></a>        }</span>
+<span id="cb2-25"><a href="#cb2-25"></a></span>
+<span id="cb2-26"><a href="#cb2-26"></a>        cursor--;</span>
+<span id="cb2-27"><a href="#cb2-27"></a>    }</span>
+<span id="cb2-28"><a href="#cb2-28"></a></span>
+<span id="cb2-29"><a href="#cb2-29"></a>    <span class="kw">return</span> start;</span>
+<span id="cb2-30"><a href="#cb2-30"></a>}</span></code></pre></div>
+<p>这个方法还负责更新相关page的上一层page信息。</p>
+<p>floorPage从指定page开始查找拥有最后一个小于等于待查找值的key所在的page，实现如下：</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">private</span> SkipListPage <span class="fu">floorPage</span>(SkipListPage start, <span class="dt">byte</span>[] key) <span class="kw">throws</span> <span class="bu">ExecutionException</span> {</span>
+<span id="cb3-2"><a href="#cb3-2"></a>    SkipListPage current = start;</span>
+<span id="cb3-3"><a href="#cb3-3"></a>    SkipListPage floor = <span class="kw">null</span>;</span>
+<span id="cb3-4"><a href="#cb3-4"></a>    <span class="kw">while</span> (current != <span class="kw">null</span>) {</span>
+<span id="cb3-5"><a href="#cb3-5"></a>        <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; entry = current.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</span>
+<span id="cb3-6"><a href="#cb3-6"></a>        <span class="kw">if</span> (entry != <span class="kw">null</span>) {</span>
+<span id="cb3-7"><a href="#cb3-7"></a>            <span class="co">// 只是在本page发现小于key的记录，还需检查下一页。</span></span>
+<span id="cb3-8"><a href="#cb3-8"></a>            floor = current;</span>
+<span id="cb3-9"><a href="#cb3-9"></a>        }</span>
+<span id="cb3-10"><a href="#cb3-10"></a></span>
+<span id="cb3-11"><a href="#cb3-11"></a>        <span class="kw">if</span> (current.<span class="fu">getRightPageNo</span>() &gt; <span class="dv">0</span>) {</span>
+<span id="cb3-12"><a href="#cb3-12"></a>            <span class="dt">int</span> pn = current.<span class="fu">getRightPageNo</span>();</span>
+<span id="cb3-13"><a href="#cb3-13"></a>            current = skipListPages.<span class="fu">get</span>(pn);</span>
+<span id="cb3-14"><a href="#cb3-14"></a>        } <span class="kw">else</span> {</span>
+<span id="cb3-15"><a href="#cb3-15"></a>            current = <span class="kw">null</span>;</span>
+<span id="cb3-16"><a href="#cb3-16"></a>        }</span>
+<span id="cb3-17"><a href="#cb3-17"></a>    }</span>
+<span id="cb3-18"><a href="#cb3-18"></a>    <span class="kw">return</span> floor;</span>
+<span id="cb3-19"><a href="#cb3-19"></a>}</span></code></pre></div>
+<p>注意，如果在该page对应map未找到大于查找值的记录，还需要到下一个page查找。</p>
+<h3 id="skiplist的更新">SkipList的更新</h3>
+<p>更新一个节点前，先使用以上方法查找、加载待插入的page，更新相关map，再使用SkipListPage.update更新文件，代码如下：</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">private</span> <span class="dt">void</span> <span class="fu">update</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
+<span id="cb4-2"><a href="#cb4-2"></a>    <span class="dt">int</span> s = HEAD_SIZE_IN_PAGE;</span>
+<span id="cb4-3"><a href="#cb4-3"></a>    <span class="dt">int</span> k = <span class="dv">0</span>;</span>
+<span id="cb4-4"><a href="#cb4-4"></a></span>
+<span id="cb4-5"><a href="#cb4-5"></a>    <span class="kw">for</span> (<span class="dt">byte</span>[] key : map.<span class="fu">keySet</span>()) {</span>
+<span id="cb4-6"><a href="#cb4-6"></a>        s += key.<span class="fu">length</span>;</span>
+<span id="cb4-7"><a href="#cb4-7"></a>        s += <span class="dv">4</span>;</span>
+<span id="cb4-8"><a href="#cb4-8"></a>        s += map.<span class="fu">get</span>(key).<span class="fu">length</span>;</span>
+<span id="cb4-9"><a href="#cb4-9"></a>        <span class="kw">if</span> (isLeaf) {</span>
+<span id="cb4-10"><a href="#cb4-10"></a>            s += <span class="dv">4</span>;</span>
+<span id="cb4-11"><a href="#cb4-11"></a>        }</span>
+<span id="cb4-12"><a href="#cb4-12"></a>        k++;</span>
+<span id="cb4-13"><a href="#cb4-13"></a>    }</span>
+<span id="cb4-14"><a href="#cb4-14"></a>    size = s;</span>
+<span id="cb4-15"><a href="#cb4-15"></a>    keys = k;</span>
+<span id="cb4-16"><a href="#cb4-16"></a>    <span class="kw">if</span> (keys == <span class="dv">0</span>) {</span>
+<span id="cb4-17"><a href="#cb4-17"></a>        pager.<span class="fu">recycle</span>(page);</span>
+<span id="cb4-18"><a href="#cb4-18"></a>    }</span>
+<span id="cb4-19"><a href="#cb4-19"></a></span>
+<span id="cb4-20"><a href="#cb4-20"></a>    <span class="kw">if</span> (<span class="fu">remaining</span>() &lt; <span class="dv">0</span>) {</span>
+<span id="cb4-21"><a href="#cb4-21"></a>        <span class="fu">split</span>();</span>
+<span id="cb4-22"><a href="#cb4-22"></a>    } <span class="kw">else</span> {</span>
+<span id="cb4-23"><a href="#cb4-23"></a>        <span class="fu">sync</span>();</span>
+<span id="cb4-24"><a href="#cb4-24"></a>    }</span>
+<span id="cb4-25"><a href="#cb4-25"></a>}</span></code></pre></div>
+<p>如上所述，如果page不在包含数据，则回收，如数据已超过page大小，则分裂page，分裂方法为分配一个page，并将除头节点以外的节点存储到新page即可。</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">private</span> <span class="dt">void</span> <span class="fu">split</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
+<span id="cb5-2"><a href="#cb5-2"></a>    Preconditions.<span class="fu">checkState</span>(<span class="kw">this</span>.<span class="fu">keys</span> &gt; <span class="dv">0</span>);</span>
+<span id="cb5-3"><a href="#cb5-3"></a>    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</span>
+<span id="cb5-4"><a href="#cb5-4"></a>    Page p = SkipList.<span class="fu">this</span>.<span class="fu">allocatePage</span>(level);</span>
+<span id="cb5-5"><a href="#cb5-5"></a>    SkipListPage newPage = skipListPages.<span class="fu">get</span>(p.<span class="fu">getNo</span>());</span>
+<span id="cb5-6"><a href="#cb5-6"></a></span>
+<span id="cb5-7"><a href="#cb5-7"></a>    newPage.<span class="fu">map</span> = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">tailMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">false</span>));</span>
+<span id="cb5-8"><a href="#cb5-8"></a>    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</span>
+<span id="cb5-9"><a href="#cb5-9"></a>    map = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">headMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">true</span>));</span>
+<span id="cb5-10"><a href="#cb5-10"></a>    newPage.<span class="fu">rightPageNo</span> = <span class="kw">this</span>.<span class="fu">rightPageNo</span>;</span>
+<span id="cb5-11"><a href="#cb5-11"></a>    <span class="kw">this</span>.<span class="fu">rightPageNo</span> = newPage.<span class="fu">getPage</span>().<span class="fu">getNo</span>();</span>
+<span id="cb5-12"><a href="#cb5-12"></a></span>
+<span id="cb5-13"><a href="#cb5-13"></a>    <span class="kw">this</span>.<span class="fu">update</span>();</span>
+<span id="cb5-14"><a href="#cb5-14"></a>    newPage.<span class="fu">update</span>();</span>
+<span id="cb5-15"><a href="#cb5-15"></a></span>
+<span id="cb5-16"><a href="#cb5-16"></a>    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - <span class="kw">this</span>.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</span>
+<span id="cb5-17"><a href="#cb5-17"></a>    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - newPage.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</span>
+<span id="cb5-18"><a href="#cb5-18"></a>}</span></code></pre></div>
+<p>注意，文件写入不是原子的，可能只写入了部分数据便宕机了，不完整的数据会导致进程无法恢复原有状态， ，persistence()需要保证要么完全写入，要么完全不写，</p>
+<p>AtomicFileWriter类实现了原子写入，并在进程启动时进行检查和恢复。</p>
+<h2 id="容错与高可用">容错与高可用</h2>
+<h3 id="主从同步">主从同步</h3>
+<p>单个进程的容错能力十分有限，为了在发生硬件故障、断电、网络故障、运维故障的情况下依然可提供服务， 系统需要进行容错设计。</p>
+<p>对于网络服务，最简单的容错方式就是主从复制，从服务进程不断复制主进程数据，当主进程宕机后，切换到从进程继续为客户端提供服务。 对于上面skip list实现，跟随者依次拷贝主进程命令到本地执行即可。</p>
+<h3 id="正确性与一致性模型">正确性与一致性模型</h3>
+<p>上面这种简单的主从同步方法可以保证系统高可用，但是除了高可用，还要满足正确率、容量、延迟等要求。 对于键值服务，正确率是指客户能够容忍多少数据丢失或数据不正确，不同应用对正确数据的定义各不相同。</p>
+<p>举个例子，如果该键值服务用于保存文章评论：</p>
+<ol type="1">
+<li>对于网站A，要求用户能立刻看到自己发表的评论，其他用户可能在一段时间后才能看到该用户的评论。</li>
+<li>对于网站B，要求用户发表的评论必须和他发表评论之前能看到的其他评论一起被其他用户看到。</li>
+<li>对于网站C，要求经过一段时间后，所有用户看到的评论和评论顺序都相同。</li>
+<li>对于网站D，要求相同用户发表的多个评论，其顺序和其发表顺序是一致的。</li>
+<li>对于网站E，要求任何评论一经发表，立刻能被所有用户看到，而且所有评论的排列顺序一定相同。</li>
+</ol>
+<p>这些正确性要求都可以用<a href="https://zh.wikipedia.org/wiki/%E5%86%85%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E6%A8%A1%E5%9E%8B">一致性模型</a>表示， 以上情况分别对应了：</p>
+<ol type="1">
+<li>Read-your-own-writes一致性。</li>
+<li>因果一致性：举个例子，用户发表的评论可能通过复制粘贴引用了他当时看到的其他评论内容，那么当他的评论发表后，这些评论也应该能被所有用户都看到。 因为之前的评论和这次发表的评论有因果关系，否则对某些评论，用户可能无法获得正确的上下文。</li>
+<li>最终一致性。</li>
+<li>单调写一致：不同用户的评论列表可能不同，但是对于某个特定用户的所有评论，其顺序是一致的。 如a用户先后有评论：a1和a2，b用户先后有评论：b1和b2，那么a1,b1,b2,a2满足单调写一致，但是b2,a1,a2,b1不满足。</li>
+<li>顺序一致性：所有用户看到的评论内容和顺序都一样。</li>
+</ol>
+<p>以上一致性都是以用户（准确说是用户浏览器进程）角度出发的，一致性模型没有好坏之分， 一致性要求越高，实现难度越大，系统延迟也越大，但是对使用者更友好，更容易理解。</p>
+<p>对于上面的主从架构，只能在系统恢复后，实现最终一致性，主从切换和网裂很容易违背其他一致性模型。</p>
+<p>我们选择对使用者最简单的顺序一致性作为实现目标。</p>
+<p>其他键值服务，如亚马逊的DynamoDB，采用多写+多读（写节点+读节点&gt;节点总数）的方式降低数据不一致的机率， 并采用<a href="https://en.wikipedia.org/wiki/Logical_clock">逻辑时钟</a>解决冲突，保证最终读一致，细节可参考其论文。</p>
+<h2 id="使用分布式事务保证顺序一致性">使用分布式事务保证顺序一致性</h2>
+<p>顺序一致性之所以简单，是因为无论系统有多少台机器，对于使用者来说，和使用一台机器没有区别。</p>
+<p>如果能够保证主从机器任何时候数据都是相同的，则可以保证顺序一致性。 这意味着对所有机器来说，数据更改是原子的，要么全部成功，要么没有任何改变，这是事务的概念。</p>
+<p>以常见的<a href="https://zh.wikipedia.org/zh-hans/%E4%BA%8C%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4">两阶段提交算法</a>实现为例， 主进程收到请求后，先向从进程发起提交，如所有从进程同意提交， 则主进程通知所有进程执行该请求，否则主进程通知其他进程取消该请求。</p>
+<h3 id="分布式事务的局限">分布式事务的局限</h3>
+<p>两阶段提交最大的问题是存在单点故障：</p>
 <ul>
-<li>开始时，客户端A和客户端B都连接了服务S1.</li>
-<li>客户端A的网络出现问题，与S1的连接断开，切换到服务S2，客户端B保持不变。</li>
-<li>客户端A和B对同一个key进行不同更新。</li>
-<li>该key在S1和S2出现冲突，违背了一致性保证。</li>
+<li>主进程宕机，无法响应任何请求。</li>
+<li>在发起阶段，任何从进程宕机或因网络故障无法通信，都会导致系统无法响应任何请求。</li>
 </ul>
-<p>很多key-value服务（如亚马逊的DynamoDB）采用多写+多读（写节点+读节点&gt;节点总数）的方式冲突发现，采用<a href="https://en.wikipedia.org/wiki/Logical_clock">逻辑时钟</a>解决冲突，保证最终读一致， 对于昵称的例子，仅仅是最终读一致的保证可能导致某个昵称在某一段时间被两个用户同时使用。</p>
-<p>保证线性一致性的常见思想是复制状态机。</p>
-<h3 id="复制状态机">复制状态机</h3>
-<p>复制状态机思想是将程序看做一个状态机，在某个状态下，对某个确定的输入，程序的下一个状态是确定的。</p>
-<p>举个例子，对两个数据库进行完全相同的一系列读写操作后，这两个数据库的数据一定是一样的（当然不能使用如current_timestamp之类的sql函数）。</p>
-<p>同样的，在缓存服务中，所有节点的初始状态是一样的，如果所有客户端的读写操作，在所有节点上按相同顺序进行执行，那么任何一个操作完成时，所有节点状态一定是一致的。</p>
-<h3 id="全序广播原子广播及共识">全序广播（原子广播）及共识</h3>
-<p>多个客户端会发生并发操作，服务器无法区分这些操作的先后顺序，因为硬件时钟并不可靠，即便存在一个可靠的时钟，网络的延迟也导致操作在不同节点有不同的到达顺序。</p>
-<p>同时，节点在收到一个操作请求时，如何确定是否有之前的操作尚未到达？</p>
-<p>所以需要对操作分配一个全局递增的编号，确定操作的顺序，同时所有节点对在这个编号的操作达成一致。</p>
-<p>这是一个典型的分布式共识问题：对某一个提案的内容达成一致。</p>
+<p>三阶段提交可以解决第二种故障，但是出现网络分裂时，会导致数据不一致，这里不做细讲。</p>
+<p>存在单点故障意味着不能满足我们高可用的目标。</p>
+<h3 id="分布式事务和分布式一致性模型的关系">分布式事务和分布式一致性模型的关系</h3>
+<p>分布式事务为了保证各个参与者的任务要么都成功，要么都取消，而不是为了保证高可用。 分布式事务可以作为实现一致性模型的技术手段。</p>
+<p>此外，在数据库中常提到的ACID的一致性，和分布式一致性也有所不同，参考<a href="https://apple.github.io/foundationdb/consistency.html">foundationdb文档的解释</a> &gt;The “C” in ACID refers to the property that data remains within an application’s integrity constraints. (For example, the constraint that some data and its index are consistent with respect to each other.) &gt;The “C” in CAP relates to a consistency model, which describes the conditions under which write operations from one client become visible to other clients. (One example is the eventual consistency model, in which writes are expected to be consistent across replicas after a sufficiently long period.)</p>
+<h2 id="复制状态机">复制状态机</h2>
+<p>如果将进程看做一个状态机，那么如果所有输入都相同的情况下，每个状态机的状态一定能达到一致，这就是复制状态机的思想。</p>
+<h3 id="全序广播原子广播">全序广播（原子广播）</h3>
+<p>对于键值系统，输入就是客户端请求，系统如果能将来自任意客户端的请求进行排序，并统一按该顺序在各个进程执行，则一定满足顺序一致性。</p>
+<p>这种做法称为全序广播或原子广播。</p>
+<h3 id="共识">共识</h3>
+<p>一种直观但错误的排序做法是使请求带上时间戳，服务端使用时间戳排序。</p>
+<p>但多个客户端会发生并发操作，服务器无法区分这些操作的先后顺序，因为硬件时钟并不可靠，即便存在一个可靠的时钟，网络的延迟也导致操作在不同节点有不同的到达顺序。 节点在收到一个操作请求时，如何确定是否有之前的操作尚未到达？这是无法做到的。</p>
+<p>换个思路，如果对每个请求分配一个全局递增的编号，同时所有进程对在每个编号的请求内容作达成一致，所有进程按编号依次执行请求，则状态一定能达到一致。 这意味着具有相同编号的多个请求只有一个会被选中执行，请求未被选中的客户端，可以选择重试。</p>
+<p>这就把问题变成了一个典型的分布式共识问题： &gt;异步系统中，多个进程对某一个提案的内容达成一致的过程，就是共识。</p>
 <p>协商<strong>每个</strong>编号操作内容的过程，就是<strong>一次</strong>分布式共识达成过程，因此全序广播问题等价为共识问题。</p>
-<h3 id="paxos共识算法">paxos共识算法</h3>
-<p>我们使用Paxos共识算法，paxos算法的推导过程就是一个为了得到结果，不断对条件进行约束的过程。</p>
-<p>首先，某个节点作为发起者（proposer），对其他节点发起提案，一种直观的方法是：如果接收者（acceptor）同意该提案，返回t，否则返回f。 如所有接收者返回t，则节点a通知所有接收者提案通过，所有节点执行该提案内容，否则节点a通知提案取消。接收者需要满足<strong>约束P1</strong>：</p>
+<h2 id="理解paxos共识算法">理解Paxos共识算法</h2>
+<p>常见的共识算法有Paxos和raft，我们使用Paxos共识算法。</p>
+<p>Paxos算法的推导过程就是一个为了得到结果，不断对条件进行约束的过程。</p>
+<p>首先，某个节点作为发起者（proposer），对其他节点发起提案，接收者需要满足<strong>约束P1</strong>：</p>
 <blockquote>
 <p>P1：一个 acceptor 必须接受（accept）第一次收到的提案。</p>
 </blockquote>
 <p>显然，违反P1的系统，不会通过任何提案被通过。</p>
-<p>以上方案实际类似于<a href="https://zh.wikipedia.org/zh-hans/%E4%BA%8C%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4">两阶段提交算法</a>， 该方法最大的问题是存在单点故障，在提案请求阶段，任何一个节点失败，都会导致提案无法通过。 因为两阶段提交是为了保证各个参与者的任务要么都成功，要么都取消，而不是为了保证高可用。</p>
-<p>为了高可用（这是使用多个节点的原因！），必须容忍部分节点的网络故障或进程失败。</p>
 <p>但如果网络分裂为A和B两个网络，A和B不能互通，一个提案在A得到批准，另一个提案在B网络得到批准，则会出现提案不一致的情况。 解决方案是只批准获得超过一半（大多数）接收者同意的提案。</p>
 <p>但是A和B网络可能有重叠，此时某些节点可能会收到两个或两个以上的提案，这些节点必须能够接受这些两个及以上的提案，因为按照约束P1， 这些提案可能是其他节点的第一个提案，已经被接受了。</p>
 <p>为了区分提案，需要为提案分配编号，比如发起节点的本地序列号+ip地址。这里不要混淆提案的编号和复制状态机输入的编号， 状态机每个编号（依次递增）的输入内容对应一次共识过程，该共识过程可能存在多个编号（只需保证单调）的提案。</p>
@@ -215,25 +396,25 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </ol>
 <h2 id="实现复制状态机">实现复制状态机</h2>
 <p><a href="./javadoc/io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>收到请求，不会立即执行， 而是交给<a href="./javadoc/io/github/parliament/ReplicateStateMachine.html">ReplicateStateMachine</a>生成一个新的状态机输入， 并委托ReplicateStateMachine对该输入所在编号的操作达成共识，由ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1"></a>Input input = rsm.<span class="fu">newState</span>(bytes);</span>
-<span id="cb2-2"><a href="#cb2-2"></a>CompletableFuture&lt;Output&gt; future = rsm.<span class="fu">submit</span>(input);</span>
-<span id="cb2-3"><a href="#cb2-3"></a><span class="kw">return</span> future.<span class="fu">thenApply</span>((output) -&gt; {</span>
-<span id="cb2-4"><a href="#cb2-4"></a>    <span class="kw">try</span> {</span>
-<span id="cb2-5"><a href="#cb2-5"></a>        <span class="kw">if</span> (!<span class="bu">Arrays</span>.<span class="fu">equals</span>(input.<span class="fu">getUuid</span>(), output.<span class="fu">getUuid</span>())) {</span>
-<span id="cb2-6"><a href="#cb2-6"></a>            <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;共识冲突&quot;</span>);</span>
-<span id="cb2-7"><a href="#cb2-7"></a>        }</span>
-<span id="cb2-8"><a href="#cb2-8"></a>        <span class="kw">return</span> RespDecoder.<span class="fu">create</span>().<span class="fu">decode</span>(output.<span class="fu">getContent</span>()).<span class="fu">get</span>();</span>
-<span id="cb2-9"><a href="#cb2-9"></a>    } <span class="kw">catch</span> (<span class="bu">Exception</span> e) {</span>
-<span id="cb2-10"><a href="#cb2-10"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;get submit result failed:&quot;</span>, e);</span>
-<span id="cb2-11"><a href="#cb2-11"></a>        <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;get submit result failed:&quot;</span> + e.<span class="fu">getClass</span>().<span class="fu">getName</span>()</span>
-<span id="cb2-12"><a href="#cb2-12"></a>                + <span class="st">&quot;,message:&quot;</span> + e.<span class="fu">getMessage</span>());</span>
-<span id="cb2-13"><a href="#cb2-13"></a>    }</span>
-<span id="cb2-14"><a href="#cb2-14"></a>});</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1"></a>Input input = rsm.<span class="fu">newState</span>(bytes);</span>
+<span id="cb6-2"><a href="#cb6-2"></a>CompletableFuture&lt;Output&gt; future = rsm.<span class="fu">submit</span>(input);</span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="kw">return</span> future.<span class="fu">thenApply</span>((output) -&gt; {</span>
+<span id="cb6-4"><a href="#cb6-4"></a>    <span class="kw">try</span> {</span>
+<span id="cb6-5"><a href="#cb6-5"></a>        <span class="kw">if</span> (!<span class="bu">Arrays</span>.<span class="fu">equals</span>(input.<span class="fu">getUuid</span>(), output.<span class="fu">getUuid</span>())) {</span>
+<span id="cb6-6"><a href="#cb6-6"></a>            <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;共识冲突&quot;</span>);</span>
+<span id="cb6-7"><a href="#cb6-7"></a>        }</span>
+<span id="cb6-8"><a href="#cb6-8"></a>        <span class="kw">return</span> RespDecoder.<span class="fu">create</span>().<span class="fu">decode</span>(output.<span class="fu">getContent</span>()).<span class="fu">get</span>();</span>
+<span id="cb6-9"><a href="#cb6-9"></a>    } <span class="kw">catch</span> (<span class="bu">Exception</span> e) {</span>
+<span id="cb6-10"><a href="#cb6-10"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;get submit result failed:&quot;</span>, e);</span>
+<span id="cb6-11"><a href="#cb6-11"></a>        <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;get submit result failed:&quot;</span> + e.<span class="fu">getClass</span>().<span class="fu">getName</span>()</span>
+<span id="cb6-12"><a href="#cb6-12"></a>                + <span class="st">&quot;,message:&quot;</span> + e.<span class="fu">getMessage</span>());</span>
+<span id="cb6-13"><a href="#cb6-13"></a>    }</span>
+<span id="cb6-14"><a href="#cb6-14"></a>});</span></code></pre></div>
 <p>如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。</p>
 <p>这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的“append x y”请求如不加id会达成一次共识，但实际只执行了一次， value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {</span>
-<span id="cb3-2"><a href="#cb3-2"></a>    <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();</span>
-<span id="cb3-3"><a href="#cb3-3"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1"></a><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {</span>
+<span id="cb7-2"><a href="#cb7-2"></a>    <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();</span>
+<span id="cb7-3"><a href="#cb7-3"></a>}</span></code></pre></div>
 <p>ReplicateStateMachine可以并发进行多个Paxos共识实例，每个实例递增分配一个编号，所有RSM实例都按照编号顺序，使用后台线程顺序执行所有编号的共识结果。</p>
 <p>顺序执行意味着KeyValueEngine无法并发处理已完成共识的各个请求，如果需要提高并发性，需要保证不同机器并发执行的结果一样，这是比较困难的， 需要完善各种锁机制和并发控制，这里不做实现。</p>
 <p>进程可能在KeyValueEngine执行数据操作命令过程中失败，或者执行完成，但在返回ReplicateStateMachine前失败，服务需要在恢复时恢复之前的正确状态。 数据库一般需要采用<a href="https://en.wikipedia.org/wiki/Write-ahead_logging">写前日志</a>技术保证事务可恢复。</p>
@@ -276,217 +457,87 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
     23     reply accept_ok(n)
     24   else
     25     reply accept_reject</code></pre>
+<p>Paxos算法有优化版本，如multi-paxos可以减少一次请求，我们使用原始算法。</p>
 <p><a href="./javadoc/io/github/parliament/paxos/Paxos.html">Paxos类</a>作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。 他为每个共识实例创建相应的发起者（proposer)，同时为本节点和其他节点的发起者创建、管理对应的接收者（acceptor)。</p>
 <p><a href="./javadoc/io/github/parliament/paxos/proposer/Proposer.html">Proposer</a>为发起者实现， <a href="./javadoc/io/github/parliament/paxos/acceptor/LocalAcceptor.html">LocalAcceptor</a>为接收者实现。</p>
 <p>各个实例的提案请求可能来自其他节点，所以提供一个网络服务<a href="./javadoc/io/github/parliament/paxos/server/PaxosServer.html">PaxosServer</a>， 通过参数中的编号区分不同共识过程实例，转发给不同实例的本地接收者处理，然后返回响应。</p>
 <p>配套的，提供<a href="./javadoc/io/github/parliament/paxos/client/SyncProxyAcceptor.html">SyncProxyAcceptor</a>作为远端接收者的本地网络代理， 请求各个PaxosServer完成提案过程。</p>
 <p><a href="./javadoc/io/github/parliament/paxos/client/InetPeerAcceptors.html">InetPeerAcceptors</a>为SyncProxyAceptor的创建工厂， 使用一个简单的<a href="./javadoc/io/github/parliament/paxos/client/ConnectionPool.html">连接池</a>为SyncProxyAcceptor提供nio channel实例。</p>
 <p>接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。 如prepare方法的代理：</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1"></a>Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {</span>
-<span id="cb5-2"><a href="#cb5-2"></a>    <span class="kw">synchronized</span> (channel) {</span>
-<span id="cb5-3"><a href="#cb5-3"></a>        <span class="bu">ByteBuffer</span> request = codec.<span class="fu">encodePrepare</span>(round, n);</span>
-<span id="cb5-4"><a href="#cb5-4"></a>        <span class="kw">while</span> (request.<span class="fu">hasRemaining</span>()) {</span>
-<span id="cb5-5"><a href="#cb5-5"></a>            channel.<span class="fu">write</span>(request);</span>
-<span id="cb5-6"><a href="#cb5-6"></a>        }</span>
-<span id="cb5-7"><a href="#cb5-7"></a></span>
-<span id="cb5-8"><a href="#cb5-8"></a>        <span class="kw">return</span> codec.<span class="fu">decodePrepare</span>(channel, n);</span>
-<span id="cb5-9"><a href="#cb5-9"></a>    }</span>
-<span id="cb5-10"><a href="#cb5-10"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1"></a>Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {</span>
+<span id="cb9-2"><a href="#cb9-2"></a>    <span class="kw">synchronized</span> (channel) {</span>
+<span id="cb9-3"><a href="#cb9-3"></a>        <span class="bu">ByteBuffer</span> request = codec.<span class="fu">encodePrepare</span>(round, n);</span>
+<span id="cb9-4"><a href="#cb9-4"></a>        <span class="kw">while</span> (request.<span class="fu">hasRemaining</span>()) {</span>
+<span id="cb9-5"><a href="#cb9-5"></a>            channel.<span class="fu">write</span>(request);</span>
+<span id="cb9-6"><a href="#cb9-6"></a>        }</span>
+<span id="cb9-7"><a href="#cb9-7"></a></span>
+<span id="cb9-8"><a href="#cb9-8"></a>        <span class="kw">return</span> codec.<span class="fu">decodePrepare</span>(channel, n);</span>
+<span id="cb9-9"><a href="#cb9-9"></a>    }</span>
+<span id="cb9-10"><a href="#cb9-10"></a>}</span></code></pre></div>
 <h3 id="正确性保证">正确性保证</h3>
 <p>上面的伪代码很简单，但是在进程可能异常退出的情况下，是不够完备的。进程被杀死、断电都会导致正在共识协商的进程退出，并在恢复后，出现错误的结果。</p>
 <p>举个例子，多数派为某个编号的共识实例通过了一个提案，但是在decide阶段，多数派全部异常退出，只有多数派以外的节点处理了提案结果。 稍后这些多数派又恢复，之前的信息已经丢失，此时又收到同一个共识实例编号的另一个提案，此提案被通过，和未异常退出的节点接受的提案不一致。</p>
 <p>所以，在prepare和accept阶段，都需要持久化Acceptor的状态，实例化Acceptor时，先尝试恢复已持久化的状态。 并通过定期<a href="./javadoc/io/github/parliament/ReplicateStateMachine.html#catchUp()">学习</a>其他节点的共识结果，快速赶上进度。</p>
 <p>如<a href="./javadoc/io/github/parliament/paxos/acceptor/LocalAcceptor.html">LocalAcceptor</a>的prepare：</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1"></a><span class="at">@Override</span></span>
-<span id="cb6-2"><a href="#cb6-2"></a><span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {</span>
-<span id="cb6-3"><a href="#cb6-3"></a>    <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {</span>
-<span id="cb6-4"><a href="#cb6-4"></a>        np = n;</span>
-<span id="cb6-5"><a href="#cb6-5"></a>        <span class="fu">persistence</span>(); <span class="co">// 保存状态</span></span>
-<span id="cb6-6"><a href="#cb6-6"></a>        <span class="kw">return</span> Prepare.<span class="fu">ok</span>(n, na, va);</span>
-<span id="cb6-7"><a href="#cb6-7"></a>    }</span>
-<span id="cb6-8"><a href="#cb6-8"></a>    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);</span>
-<span id="cb6-9"><a href="#cb6-9"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1"></a><span class="at">@Override</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a><span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {</span>
+<span id="cb10-3"><a href="#cb10-3"></a>    <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {</span>
+<span id="cb10-4"><a href="#cb10-4"></a>        np = n;</span>
+<span id="cb10-5"><a href="#cb10-5"></a>        <span class="fu">persistence</span>(); <span class="co">// 保存状态</span></span>
+<span id="cb10-6"><a href="#cb10-6"></a>        <span class="kw">return</span> Prepare.<span class="fu">ok</span>(n, na, va);</span>
+<span id="cb10-7"><a href="#cb10-7"></a>    }</span>
+<span id="cb10-8"><a href="#cb10-8"></a>    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);</span>
+<span id="cb10-9"><a href="#cb10-9"></a>}</span></code></pre></div>
 <p><a href="./javadoc/io/github/parliament/paxos/Paxos.html">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1"></a><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb7-2"><a href="#cb7-2"></a>    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {</span>
-<span id="cb7-3"><a href="#cb7-3"></a>        <span class="kw">return</span>;</span>
-<span id="cb7-4"><a href="#cb7-4"></a>    }</span>
-<span id="cb7-5"><a href="#cb7-5"></a>    persistence.<span class="fu">put</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNp</span>().<span class="fu">getBytes</span>());</span>
-<span id="cb7-6"><a href="#cb7-6"></a>    <span class="kw">if</span> (!Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNa</span>())) {</span>
-<span id="cb7-7"><a href="#cb7-7"></a>        persistence.<span class="fu">put</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNa</span>().<span class="fu">getBytes</span>());</span>
-<span id="cb7-8"><a href="#cb7-8"></a>    }</span>
-<span id="cb7-9"><a href="#cb7-9"></a>    <span class="kw">if</span> (acceptor.<span class="fu">getVa</span>() != <span class="kw">null</span>) {</span>
-<span id="cb7-10"><a href="#cb7-10"></a>        persistence.<span class="fu">put</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getVa</span>());</span>
-<span id="cb7-11"><a href="#cb7-11"></a>    }</span>
-<span id="cb7-12"><a href="#cb7-12"></a>}</span>
-<span id="cb7-13"><a href="#cb7-13"></a></span>
-<span id="cb7-14"><a href="#cb7-14"></a>Optional&lt;LocalAcceptor&gt; <span class="fu">regainAcceptor</span>(<span class="dt">int</span> round) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb7-15"><a href="#cb7-15"></a>    <span class="dt">byte</span>[] np = persistence.<span class="fu">get</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>());</span>
-<span id="cb7-16"><a href="#cb7-16"></a></span>
-<span id="cb7-17"><a href="#cb7-17"></a>    <span class="kw">if</span> (np == <span class="kw">null</span>) {</span>
-<span id="cb7-18"><a href="#cb7-18"></a>        <span class="kw">return</span> Optional.<span class="fu">empty</span>();</span>
-<span id="cb7-19"><a href="#cb7-19"></a>    }</span>
-<span id="cb7-20"><a href="#cb7-20"></a>    <span class="dt">byte</span>[] na = persistence.<span class="fu">get</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>());</span>
-<span id="cb7-21"><a href="#cb7-21"></a>    <span class="dt">byte</span>[] va = persistence.<span class="fu">get</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>());</span>
-<span id="cb7-22"><a href="#cb7-22"></a></span>
-<span id="cb7-23"><a href="#cb7-23"></a>    <span class="bu">String</span> nps = <span class="kw">new</span> <span class="bu">String</span>(np);</span>
-<span id="cb7-24"><a href="#cb7-24"></a>    <span class="bu">String</span> nas = na == <span class="kw">null</span> ? <span class="kw">null</span> : <span class="kw">new</span> <span class="bu">String</span>(na);</span>
-<span id="cb7-25"><a href="#cb7-25"></a></span>
-<span id="cb7-26"><a href="#cb7-26"></a>    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));</span>
-<span id="cb7-27"><a href="#cb7-27"></a>}</span></code></pre></div>
-<p>注意，文件写入不是原子的，可能存在只写入了部分数据的问题，persistence()需要保证要么完全写入，要么完全不写，我们在persistence的skip list实现中讲解这一点。</p>
-<p>同时，输入一直在增长，需要删除共识服务中已经处理完成的输入，见<a href="./javadoc/io/github/parliament/ReplicateStateMachine.html#forget()">forget方法</a>。 ### 活跃性问题 根据<a href="https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/">FLP不可能原理</a>：</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1"></a><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
+<span id="cb11-2"><a href="#cb11-2"></a>    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {</span>
+<span id="cb11-3"><a href="#cb11-3"></a>        <span class="kw">return</span>;</span>
+<span id="cb11-4"><a href="#cb11-4"></a>    }</span>
+<span id="cb11-5"><a href="#cb11-5"></a>    persistence.<span class="fu">put</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNp</span>().<span class="fu">getBytes</span>());</span>
+<span id="cb11-6"><a href="#cb11-6"></a>    <span class="kw">if</span> (!Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNa</span>())) {</span>
+<span id="cb11-7"><a href="#cb11-7"></a>        persistence.<span class="fu">put</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNa</span>().<span class="fu">getBytes</span>());</span>
+<span id="cb11-8"><a href="#cb11-8"></a>    }</span>
+<span id="cb11-9"><a href="#cb11-9"></a>    <span class="kw">if</span> (acceptor.<span class="fu">getVa</span>() != <span class="kw">null</span>) {</span>
+<span id="cb11-10"><a href="#cb11-10"></a>        persistence.<span class="fu">put</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getVa</span>());</span>
+<span id="cb11-11"><a href="#cb11-11"></a>    }</span>
+<span id="cb11-12"><a href="#cb11-12"></a>}</span>
+<span id="cb11-13"><a href="#cb11-13"></a></span>
+<span id="cb11-14"><a href="#cb11-14"></a>Optional&lt;LocalAcceptor&gt; <span class="fu">regainAcceptor</span>(<span class="dt">int</span> round) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
+<span id="cb11-15"><a href="#cb11-15"></a>    <span class="dt">byte</span>[] np = persistence.<span class="fu">get</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>());</span>
+<span id="cb11-16"><a href="#cb11-16"></a></span>
+<span id="cb11-17"><a href="#cb11-17"></a>    <span class="kw">if</span> (np == <span class="kw">null</span>) {</span>
+<span id="cb11-18"><a href="#cb11-18"></a>        <span class="kw">return</span> Optional.<span class="fu">empty</span>();</span>
+<span id="cb11-19"><a href="#cb11-19"></a>    }</span>
+<span id="cb11-20"><a href="#cb11-20"></a>    <span class="dt">byte</span>[] na = persistence.<span class="fu">get</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>());</span>
+<span id="cb11-21"><a href="#cb11-21"></a>    <span class="dt">byte</span>[] va = persistence.<span class="fu">get</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>());</span>
+<span id="cb11-22"><a href="#cb11-22"></a></span>
+<span id="cb11-23"><a href="#cb11-23"></a>    <span class="bu">String</span> nps = <span class="kw">new</span> <span class="bu">String</span>(np);</span>
+<span id="cb11-24"><a href="#cb11-24"></a>    <span class="bu">String</span> nas = na == <span class="kw">null</span> ? <span class="kw">null</span> : <span class="kw">new</span> <span class="bu">String</span>(na);</span>
+<span id="cb11-25"><a href="#cb11-25"></a></span>
+<span id="cb11-26"><a href="#cb11-26"></a>    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));</span>
+<span id="cb11-27"><a href="#cb11-27"></a>}</span></code></pre></div>
+<p>输入一直在增长，需要删除共识服务中已经处理完成的输入，见<a href="./javadoc/io/github/parliament/ReplicateStateMachine.html#forget()">forget方法</a>。 ### 活跃性问题 根据<a href="https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/">FLP不可能原理</a>：</p>
 <blockquote>
 <p>任何分布式共识算法，只要有一个进程宕机，剩余的进程存在永远无法达成共识的可能性。</p>
 </blockquote>
 <p>对于Paxos算法，很容易找到无法达成共识的情况，比如不同proposer的accept每次都因其他proposer产生的更高prepare编号而acceptor被拒绝。 解决办法是在可能冲突时，引入随机等待，降低这种可能性，并在重试达到最大次数时，失败退出。如：</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">if</span> (!decided) {</span>
-<span id="cb8-2"><a href="#cb8-2"></a>    retryCount++;</span>
-<span id="cb8-3"><a href="#cb8-3"></a>    <span class="kw">try</span> {</span>
-<span id="cb8-4"><a href="#cb8-4"></a>        <span class="bu">Thread</span>.<span class="fu">sleep</span>(<span class="bu">Math</span>.<span class="fu">abs</span>(random.<span class="fu">nextInt</span>()) % <span class="dv">300</span>);</span>
-<span id="cb8-5"><a href="#cb8-5"></a>    } <span class="kw">catch</span> (<span class="bu">InterruptedException</span> e) {</span>
-<span id="cb8-6"><a href="#cb8-6"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.&quot;</span>, e);</span>
-<span id="cb8-7"><a href="#cb8-7"></a>        <span class="kw">return</span> <span class="kw">null</span>;</span>
-<span id="cb8-8"><a href="#cb8-8"></a>    }</span>
-<span id="cb8-9"><a href="#cb8-9"></a>    <span class="kw">if</span> (retryCount &gt;= <span class="dv">7</span>) {</span>
-<span id="cb8-10"><a href="#cb8-10"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.Retried {} times.&quot;</span>, <span class="dv">7</span>);</span>
-<span id="cb8-11"><a href="#cb8-11"></a>        <span class="kw">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span>();</span>
-<span id="cb8-12"><a href="#cb8-12"></a>    }</span>
-<span id="cb8-13"><a href="#cb8-13"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">if</span> (!decided) {</span>
+<span id="cb12-2"><a href="#cb12-2"></a>    retryCount++;</span>
+<span id="cb12-3"><a href="#cb12-3"></a>    <span class="kw">try</span> {</span>
+<span id="cb12-4"><a href="#cb12-4"></a>        <span class="bu">Thread</span>.<span class="fu">sleep</span>(<span class="bu">Math</span>.<span class="fu">abs</span>(random.<span class="fu">nextInt</span>()) % <span class="dv">300</span>);</span>
+<span id="cb12-5"><a href="#cb12-5"></a>    } <span class="kw">catch</span> (<span class="bu">InterruptedException</span> e) {</span>
+<span id="cb12-6"><a href="#cb12-6"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.&quot;</span>, e);</span>
+<span id="cb12-7"><a href="#cb12-7"></a>        <span class="kw">return</span> <span class="kw">null</span>;</span>
+<span id="cb12-8"><a href="#cb12-8"></a>    }</span>
+<span id="cb12-9"><a href="#cb12-9"></a>    <span class="kw">if</span> (retryCount &gt;= <span class="dv">7</span>) {</span>
+<span id="cb12-10"><a href="#cb12-10"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.Retried {} times.&quot;</span>, <span class="dv">7</span>);</span>
+<span id="cb12-11"><a href="#cb12-11"></a>        <span class="kw">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span>();</span>
+<span id="cb12-12"><a href="#cb12-12"></a>    }</span>
+<span id="cb12-13"><a href="#cb12-13"></a>}</span></code></pre></div>
 <p>如果去掉这个随机等待，在多核机器运行单元测试非常容易出现重试失败。</p>
-<h2 id="持久化">持久化</h2>
-<p>假设所有节点宕机重启，复制状态机可以依次执行所有共识结果中恢复缓存数据，显然这需要一直保留所有共识结果，且恢复过程会非常慢。</p>
-<p>所以缓存数据需要单独做持久化，重启只需执行尚未被执行的共识。前面已经提到过了复制状态机基于执行日志的重试机制以及其局限， 下面讲讲对缓存数据进行持久化会遇到的各种细节。</p>
-<h3 id="skip-list算法">skip list算法</h3>
-<p>GET和PUT、DEL、RANGE是典型的有序Map的操作，比如JDK中的<a href="https://docs.oracle.com/javase/9/docs/api/java/util/NavigableMap.html">NavigableMap接口</a>， 其并发实现<a href="https://docs.oracle.com/javase/9/docs/api/java/util/concurrent/ConcurrentSkipListMap.html">ConcurrentSkipListMap</a>采用了skip list算法， 本应用也采用该算法。</p>
-<p>skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法说明见<a href="https://zh.wikipedia.org/wiki/%E8%B7%B3%E8%B7%83%E5%88%97%E8%A1%A8">wikipedia</a>。 该算法通过维护多层链表，依次快速接近查找目标。</p>
-<p>演示（来自Wikipedia）：</p>
-<figure>
-<img src="./skiplist.gif" alt="" /><figcaption>skip list</figcaption>
-</figure>
-<h3 id="skip-list的持久化实现">skip list的持久化实现</h3>
-<p>在内存中实现skip list的数据结构非常简单，使用文件接口的持久化实现则需要考虑很多细节。</p>
-<p>首先需要考虑如何使用文件表示链表结构，每个节点需要知道下一个节点位置， 对于内存实现的skip list，编程语言的指针或引用处理起来非常自然，使用文件实现，我们需要手工分配和管理节点在文件中的地址和存储。</p>
-<p>以skip list的插入操作为例，一种简要的步骤如下： - 获得最上层链表的头节点的文件名称和位置信息，文件名和位置信息可以记录在其他元信息文件中。 - 获得头节点的key值，与参数key比较，以决定继续查找同层下一个节点还是进入下一层链表。 - 节点中key的长度不是固定的，文件中需要区分key值、地址内容，可以使用某固定字段保存key长度，以便程序快速定位。 - 到达底层节点后，寻找插入位置。 - 底层节点需要保存key对应的value值，可以保存在节点中（同样需要使用某个固定字段保存value长度），也可以保存在其他地方，使用地址进行查找，但这样会多一次磁盘寻址操作。 - 待插入位置可能在链表中间，文件接口没有insert之类的操作，为了后续节点不被覆盖，需依次拷贝后续节点到文件中的新位置。 - 更改节点位置后，需要更新相关节点保存的该节点的位置信息。</p>
-<p>可以看到，按照文件物理位置进行地址管理，维护位置信息非常麻烦，我们希望新节点的分配不会改变原有节点的物理位置， 同时希望即便更新了相关节点的物理位置后，不用更改其他节点对该节点的引用。</p>
-<p>参考内存管理中不同进程共享相同地址空间的方式，采用一个映射表，对每个节点分配一个唯一编号表示虚拟地址，在映射表中保存该虚拟地址的文件物理位置。 这样，在文件中移动节点后，只需更新映射表中该节点的映射信息。分配新空间时，也不用按照逻辑位置决定物理空间的位置。</p>
-<p>解决了地址问题，该方案另一个问题是效率低下，无论查找和更新，都需要读取很多次磁盘，磁盘的读写时间比内存读写时间高三个数量级。</p>
-<h3 id="page管理">Page管理</h3>
-<p>每个node对应一个地址，空间上不太经济，1万个节点需要4万个字节。</p>
-<p>另外，大部分存储设备是以“块”（block）为读写单位的，块的大小常见有4K bytes、8K bytes等，文件系统一般以设备的块大小的整数倍为读写单位。</p>
-<p>同时，文件系统对单个文件的大小也有限制。</p>
-<p>结合以上分析，我们按文件系统的块大小为单位分配文件空间，一个块大小的空间称为page，每个page有一个唯一编号，使用heap（堆文件）管理page，heap文件可能有多个， 在一个page上托管多个实际的skip list节点。</p>
-<p>每个heap文件的结构如下：</p>
-<pre><code>|------------------heads------------------------|---------pages-------|
-| page number (4字节) | page location (4字节)|.. | page | page |...|...|</code></pre>
-<h4 id="初始化">初始化</h4>
-<p>第一次运行会运行pager的init方法，通过该方法指定heap存储目录、每个heap文件的最大字节数、每个page的字节数进行存储目录的初始化， 在目录中使用metainf保存字节数信息，使用page_seq文件保存当前最大page编号，以便在进程重启时恢复page管理。</p>
-<h4 id="page寻址及分配">page寻址及分配</h4>
-<p>Pager的allocate方法首先使用空闲page的编号（从metainf尾部获取空闲page编号），没有空闲page则递增page_seq，获得一个新的page编号， 通过page编号查找到对应的heap文件，如果heap文件不存在，则初始化，从heap文件构造一个Heap对象。</p>
-<p>Heap对象的头部heads成员将page编号映射为page在该heap文件的偏移地址，如page未分配，则偏移为-1。</p>
-<p>新建page从heap尾部分配，分配后更新head信息并持久化到heap文件。</p>
-<h3 id="skip-list的查找">skip list的查找</h3>
-<p>一个page中包含多个skip list节点，为了提高读写速度，一般将page缓存到内存中，更新后，写回文件，这里使用weak reference的cache缓存page。</p>
-<p>skiplist.mf保存了每层首节点的编号，由SkipList.init方法进行初始化。</p>
-<p>page被加载到内存后，各个节点转换为JDK NavigableMap包含的条目，以便page中快速查找定位。 skip list的上层节点和底层节点的值含义不同，上层节点的value表示下一个节点所在page的编号，底层节点的value表示真正保存的值。</p>
-<p>不管查询还是写入、删除，都需要先定位节点所在page页面，如查找某key在某层级的page，代码如下：</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">private</span> SkipListPage <span class="fu">findSkipListPageForKey</span>(<span class="dt">byte</span>[] key, <span class="dt">int</span> lv) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb10-2"><a href="#cb10-2"></a>    Preconditions.<span class="fu">checkArgument</span>(lv &gt;= <span class="dv">0</span>);</span>
-<span id="cb10-3"><a href="#cb10-3"></a>    Preconditions.<span class="fu">checkArgument</span>(lv &lt; SkipList.<span class="fu">this</span>.<span class="fu">height</span>);</span>
-<span id="cb10-4"><a href="#cb10-4"></a>    <span class="dt">int</span> cursor = height - <span class="dv">1</span>;</span>
-<span id="cb10-5"><a href="#cb10-5"></a>    SkipListPage start = <span class="kw">null</span>;</span>
-<span id="cb10-6"><a href="#cb10-6"></a>    SkipListPage up = <span class="kw">null</span>;</span>
-<span id="cb10-7"><a href="#cb10-7"></a>    <span class="kw">while</span> (cursor &gt;= lv) {</span>
-<span id="cb10-8"><a href="#cb10-8"></a>        up = start;</span>
-<span id="cb10-9"><a href="#cb10-9"></a>        <span class="kw">if</span> (start == <span class="kw">null</span>) {</span>
-<span id="cb10-10"><a href="#cb10-10"></a>            start = skipListPages.<span class="fu">get</span>(startPages[cursor]);</span>
-<span id="cb10-11"><a href="#cb10-11"></a>        }</span>
-<span id="cb10-12"><a href="#cb10-12"></a>        SkipListPage slice = <span class="fu">floorPage</span>(start, key);</span>
-<span id="cb10-13"><a href="#cb10-13"></a></span>
-<span id="cb10-14"><a href="#cb10-14"></a>        <span class="kw">if</span> (cursor == lv) {</span>
-<span id="cb10-15"><a href="#cb10-15"></a>            <span class="kw">return</span> slice == <span class="kw">null</span> ? start : slice;</span>
-<span id="cb10-16"><a href="#cb10-16"></a>        }</span>
-<span id="cb10-17"><a href="#cb10-17"></a>        <span class="kw">if</span> (slice != <span class="kw">null</span>) {</span>
-<span id="cb10-18"><a href="#cb10-18"></a>            <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; e = slice.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</span>
-<span id="cb10-19"><a href="#cb10-19"></a>            <span class="dt">int</span> pn = <span class="bu">ByteBuffer</span>.<span class="fu">wrap</span>(e.<span class="fu">getValue</span>()).<span class="fu">getInt</span>();</span>
-<span id="cb10-20"><a href="#cb10-20"></a>            start = skipListPages.<span class="fu">get</span>(pn);</span>
-<span id="cb10-21"><a href="#cb10-21"></a>            start.<span class="fu">setSuperPage</span>(up);</span>
-<span id="cb10-22"><a href="#cb10-22"></a>        } <span class="kw">else</span> {</span>
-<span id="cb10-23"><a href="#cb10-23"></a>            start = <span class="kw">null</span>;</span>
-<span id="cb10-24"><a href="#cb10-24"></a>        }</span>
-<span id="cb10-25"><a href="#cb10-25"></a></span>
-<span id="cb10-26"><a href="#cb10-26"></a>        cursor--;</span>
-<span id="cb10-27"><a href="#cb10-27"></a>    }</span>
-<span id="cb10-28"><a href="#cb10-28"></a></span>
-<span id="cb10-29"><a href="#cb10-29"></a>    <span class="kw">return</span> start;</span>
-<span id="cb10-30"><a href="#cb10-30"></a>}</span></code></pre></div>
-<p>这个方法还负责更新相关page的上一层page信息。</p>
-<p>floorPage从指定page开始查找拥有最后一个小于等于待查找值的key所在的page，实现如下：</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">private</span> SkipListPage <span class="fu">floorPage</span>(SkipListPage start, <span class="dt">byte</span>[] key) <span class="kw">throws</span> <span class="bu">ExecutionException</span> {</span>
-<span id="cb11-2"><a href="#cb11-2"></a>    SkipListPage current = start;</span>
-<span id="cb11-3"><a href="#cb11-3"></a>    SkipListPage floor = <span class="kw">null</span>;</span>
-<span id="cb11-4"><a href="#cb11-4"></a>    <span class="kw">while</span> (current != <span class="kw">null</span>) {</span>
-<span id="cb11-5"><a href="#cb11-5"></a>        <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; entry = current.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</span>
-<span id="cb11-6"><a href="#cb11-6"></a>        <span class="kw">if</span> (entry != <span class="kw">null</span>) {</span>
-<span id="cb11-7"><a href="#cb11-7"></a>            <span class="co">// 只是在本page发现小于key的记录，还需检查下一页。</span></span>
-<span id="cb11-8"><a href="#cb11-8"></a>            floor = current;</span>
-<span id="cb11-9"><a href="#cb11-9"></a>        }</span>
-<span id="cb11-10"><a href="#cb11-10"></a></span>
-<span id="cb11-11"><a href="#cb11-11"></a>        <span class="kw">if</span> (current.<span class="fu">getRightPageNo</span>() &gt; <span class="dv">0</span>) {</span>
-<span id="cb11-12"><a href="#cb11-12"></a>            <span class="dt">int</span> pn = current.<span class="fu">getRightPageNo</span>();</span>
-<span id="cb11-13"><a href="#cb11-13"></a>            current = skipListPages.<span class="fu">get</span>(pn);</span>
-<span id="cb11-14"><a href="#cb11-14"></a>        } <span class="kw">else</span> {</span>
-<span id="cb11-15"><a href="#cb11-15"></a>            current = <span class="kw">null</span>;</span>
-<span id="cb11-16"><a href="#cb11-16"></a>        }</span>
-<span id="cb11-17"><a href="#cb11-17"></a>    }</span>
-<span id="cb11-18"><a href="#cb11-18"></a>    <span class="kw">return</span> floor;</span>
-<span id="cb11-19"><a href="#cb11-19"></a>}</span></code></pre></div>
-<p>注意，如果在该page对应map未找到大于查找值的记录，还需要到下一个page查找。</p>
-<h3 id="skip-list的更新">skip list的更新</h3>
-<p>更新一个节点前，先使用以上方法查找、加载待插入的page，更新相关map，再使用SkipListPage.update更新文件，代码如下：</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">private</span> <span class="dt">void</span> <span class="fu">update</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb12-2"><a href="#cb12-2"></a>    <span class="dt">int</span> s = HEAD_SIZE_IN_PAGE;</span>
-<span id="cb12-3"><a href="#cb12-3"></a>    <span class="dt">int</span> k = <span class="dv">0</span>;</span>
-<span id="cb12-4"><a href="#cb12-4"></a></span>
-<span id="cb12-5"><a href="#cb12-5"></a>    <span class="kw">for</span> (<span class="dt">byte</span>[] key : map.<span class="fu">keySet</span>()) {</span>
-<span id="cb12-6"><a href="#cb12-6"></a>        s += key.<span class="fu">length</span>;</span>
-<span id="cb12-7"><a href="#cb12-7"></a>        s += <span class="dv">4</span>;</span>
-<span id="cb12-8"><a href="#cb12-8"></a>        s += map.<span class="fu">get</span>(key).<span class="fu">length</span>;</span>
-<span id="cb12-9"><a href="#cb12-9"></a>        <span class="kw">if</span> (isLeaf) {</span>
-<span id="cb12-10"><a href="#cb12-10"></a>            s += <span class="dv">4</span>;</span>
-<span id="cb12-11"><a href="#cb12-11"></a>        }</span>
-<span id="cb12-12"><a href="#cb12-12"></a>        k++;</span>
-<span id="cb12-13"><a href="#cb12-13"></a>    }</span>
-<span id="cb12-14"><a href="#cb12-14"></a>    size = s;</span>
-<span id="cb12-15"><a href="#cb12-15"></a>    keys = k;</span>
-<span id="cb12-16"><a href="#cb12-16"></a>    <span class="kw">if</span> (keys == <span class="dv">0</span>) {</span>
-<span id="cb12-17"><a href="#cb12-17"></a>        pager.<span class="fu">recycle</span>(page);</span>
-<span id="cb12-18"><a href="#cb12-18"></a>    }</span>
-<span id="cb12-19"><a href="#cb12-19"></a></span>
-<span id="cb12-20"><a href="#cb12-20"></a>    <span class="kw">if</span> (<span class="fu">remaining</span>() &lt; <span class="dv">0</span>) {</span>
-<span id="cb12-21"><a href="#cb12-21"></a>        <span class="fu">split</span>();</span>
-<span id="cb12-22"><a href="#cb12-22"></a>    } <span class="kw">else</span> {</span>
-<span id="cb12-23"><a href="#cb12-23"></a>        <span class="fu">sync</span>();</span>
-<span id="cb12-24"><a href="#cb12-24"></a>    }</span>
-<span id="cb12-25"><a href="#cb12-25"></a>}</span></code></pre></div>
-<p>如上缩减，如果page不在包含数据，则回收，如数据已超过page大小，则分裂page，分裂方法为分配一个page，并将除头节点以外的节点存储到新page即可。</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">private</span> <span class="dt">void</span> <span class="fu">split</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb13-2"><a href="#cb13-2"></a>    Preconditions.<span class="fu">checkState</span>(<span class="kw">this</span>.<span class="fu">keys</span> &gt; <span class="dv">0</span>);</span>
-<span id="cb13-3"><a href="#cb13-3"></a>    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</span>
-<span id="cb13-4"><a href="#cb13-4"></a>    Page p = SkipList.<span class="fu">this</span>.<span class="fu">allocatePage</span>(level);</span>
-<span id="cb13-5"><a href="#cb13-5"></a>    SkipListPage newPage = skipListPages.<span class="fu">get</span>(p.<span class="fu">getNo</span>());</span>
-<span id="cb13-6"><a href="#cb13-6"></a></span>
-<span id="cb13-7"><a href="#cb13-7"></a>    newPage.<span class="fu">map</span> = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">tailMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">false</span>));</span>
-<span id="cb13-8"><a href="#cb13-8"></a>    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</span>
-<span id="cb13-9"><a href="#cb13-9"></a>    map = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">headMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">true</span>));</span>
-<span id="cb13-10"><a href="#cb13-10"></a>    newPage.<span class="fu">rightPageNo</span> = <span class="kw">this</span>.<span class="fu">rightPageNo</span>;</span>
-<span id="cb13-11"><a href="#cb13-11"></a>    <span class="kw">this</span>.<span class="fu">rightPageNo</span> = newPage.<span class="fu">getPage</span>().<span class="fu">getNo</span>();</span>
-<span id="cb13-12"><a href="#cb13-12"></a></span>
-<span id="cb13-13"><a href="#cb13-13"></a>    <span class="kw">this</span>.<span class="fu">update</span>();</span>
-<span id="cb13-14"><a href="#cb13-14"></a>    newPage.<span class="fu">update</span>();</span>
-<span id="cb13-15"><a href="#cb13-15"></a></span>
-<span id="cb13-16"><a href="#cb13-16"></a>    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - <span class="kw">this</span>.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</span>
-<span id="cb13-17"><a href="#cb13-17"></a>    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - newPage.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</span>
-<span id="cb13-18"><a href="#cb13-18"></a>}</span></code></pre></div>
+<h2 id="总结">总结</h2>
+<p>到这里，系统基本功能就完成了。我们的系统很简单，但是低并发的场景，也够用了。</p>
+<p>我们只保证了高可用，如果要保证容量和系统吞吐量，我们需要对数据进行切分（sharding），不同机器处理不同范围的数据， 数据范围的划分可以会随系统容量而不断变化，这意味着本身在A机器的数据，可能需要移动到B机器上，读者可以思考一下如何在数据切分变化时保证顺序一致性。</p>
+<p>我们的SkipList没有实现并发处理，一种思路是对一定时间内完成共识的多个请求并发处理，读者可以进一步思考不同进程的并发处理结果如何保证一致？</p>
 </body>
 </html>

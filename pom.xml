@@ -6,14 +6,13 @@
 
     <groupId>io.github.parliament</groupId>
     <artifactId>parliament</artifactId>
-    <version>${parliament.version}</version>
+    <version>1.0</version>
     <packaging>jar</packaging>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.9</maven.compiler.source>
         <maven.compiler.target>${maven.compiler.source}</maven.compiler.target>
-        <parliament.version>1.0-SNAPSHOT</parliament.version>
         <junit.jupiter.version>5.3.0</junit.jupiter.version>
     </properties>
 
