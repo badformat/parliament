@@ -27,7 +27,7 @@
 出于这样的好奇，作者通过实现一个分布式键值服务，对分布式系统的理论落地、实现难点有了更深认识，
 最后总结出此文，覆盖了网络实现、存储实现、paxos算法理解、一致性模型、副本实现等内容。
 
-项目源码及构建、运行方式请参看👉 ：[项目主页](https://github.com/z42y/parliament/)，同时提供了[javadoc参考](./javadoc/index.html)。
+项目源码及构建、运行方式请参看👉 ：[项目主页](https://github.com/z42y/parliament/)，同时提供了[javadoc参考](https://z42y.github.io/parliament/javadoc//index.html)。
 
 欢迎提issue！🚀
 
@@ -42,21 +42,22 @@
 提供服务的第一步是接受、解析客户端通过网络发送的命令请求，使用JAVA NIO处理。
 
 ### JAVA NIO的使用
-首先打开socket接收客户连接，在连接成功的channel上挂载一个[RespReadHandler](./javadoc/io/github/parliament/resp/RespReadHandler.html)类，
-使用[RespDecoder](./javadoc/io/github/parliament/resp/RespDecoder.html)类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断是否解码完成。
+首先打开socket接收客户连接，在连接成功的channel上挂载一个[RespReadHandler](https://z42y.github.io/parliament/javadoc//io/github/parliament/resp/RespReadHandler.html)类，
+使用[RespDecoder](https://z42y.github.io/parliament/javadoc//io/github/parliament/resp/RespDecoder.html)类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断是否解码完成。
 
-解码完成后，使用[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)进行真正的键值读写处理，此处先不考虑KeyvalueEngine的实现细节。
+解码完成后，使用[KeyValueEngine](https://z42y.github.io/parliament/javadoc//io/github/parliament/kv/KeyValueEngine.html)进行真正的键值读写处理，此处先不考虑KeyvalueEngine的实现细节。
 
-执行完客户端命令后，ReadHandler新建一个[RespWriteHandler](./javadoc/io/github/parliament/resp/RespWriteHandler.html)将结果返回给客户端，
+执行完客户端命令后，ReadHandler新建一个[RespWriteHandler](https://z42y.github.io/parliament/javadoc//io/github/parliament/resp/RespWriteHandler.html)将结果返回给客户端，
 接着重新挂载一个RespReadHandler进行下一个请求处理。
 
 重新生成RespWriterHandler和RespReadHandler是为了方便进行GC，当然可以手工管理各种buffer的回收和重利用，这里不做详细设计了。
 
-因为保存的对象都比较小，[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)并没有使用InputStream之类的模式进一步提升异步性能。
+因为保存的对象都比较小，[KeyValueEngine](https://z42y.github.io/parliament/javadoc//io/github/parliament/kv/KeyValueEngine.html)并没有使用InputStream之类的模式进一步提升异步性能。
 
 ### 网络协议的解析构造
-[RespDecoder](./javadoc/io/github/parliament/resp/RespDecoder.html)是redis的[RESP协议](https://redis.io/topics/protocol)解码器，
+[RespDecoder](https://z42y.github.io/parliament/javadoc//io/github/parliament/resp/RespDecoder.html)是redis的[RESP协议](https://redis.io/topics/protocol)解码器，
 RESP一共有以下几种数据类型：
+
 - SIMPLE_STRING 字符串
 - ERROR 错误字符串
 - INTEGER 整数
@@ -70,7 +71,7 @@ RESP一共有以下几种数据类型：
 
 另外，报文处理往往需要"回溯"操作，从之前某个位置重新开始解析。使用ByteBuffer的flip和rewind、reset太底层，抽象层次不够。
 
-所以通过实现自己的[ByteBuf](./javadoc/io/github/parliament/resp/ByteBuf.html)进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。
+所以通过实现自己的[ByteBuf](https://z42y.github.io/parliament/javadoc//io/github/parliament/resp/ByteBuf.html)进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。
 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短、数据量都小，无法体现其优势。
 
 ## 键值命令实现
@@ -351,6 +352,7 @@ AtomicFileWriter类实现了原子写入，并在进程启动时进行检查和�
 这意味着具有相同编号的多个请求只有一个会被选中执行，请求未被选中的客户端，可以选择重试。
 
 这就把问题变成了一个典型的分布式共识问题：
+
 >异步系统中，多个进程对某一个提案的内容达成一致的过程，就是共识。
 
 协商**每个**编号操作内容的过程，就是**一次**分布式共识达成过程，因此全序广播问题等价为共识问题。
@@ -395,10 +397,10 @@ Paxos算法的推导过程就是一个为了得到结果，不断对条件进行
 >C中每个接收者都批准了m到n-1其中一个提案，m到n-1的每个被批准的提案其值都是v。
 
 因为任何大多数接收者集合S，和C至少有一个公共接收者，编号为n的提案w被批准，那么只有两种情况：
->
+
 >1. 存在一个包含大多数接收者的集合S，从未接受过小于n的提案。
 >2. w和S中所有已接受的、编号小于n的最大编号提案值相同，即值为v。因为公共接收者需要批准相同的提案值。
->
+
 这个证明看起来很多余，但是请注意，编号m到n的提案不是按编号先后顺序发起的，这些提案的发起顺序是没有保证的。
 
 编号为n提案的发起者需要知道所有已接受提案中小于n的最大编号提案的值（如果有）。知道已接受的提案是值很简单的，预测未来很难办，
@@ -423,8 +425,8 @@ Paxos算法的推导过程就是一个为了得到结果，不断对条件进行
     3. accept被多数派批准后，发起者再通知所有接收者提案已批准（decided)的消息。
  
 ## 实现复制状态机
-[KeyValueEngine](./javadoc/io/github/parliament/kv/KeyValueEngine.html)收到请求，不会立即执行，
-而是交给[ReplicateStateMachine](./javadoc/io/github/parliament/ReplicateStateMachine.html)生成一个新的状态机输入，
+[KeyValueEngine](https://z42y.github.io/parliament/javadoc//io/github/parliament/kv/KeyValueEngine.html)收到请求，不会立即执行，
+而是交给[ReplicateStateMachine](https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html)生成一个新的状态机输入，
 并委托ReplicateStateMachine对该输入所在编号的操作达成共识，由ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。
 
 ```{.java}
@@ -462,10 +464,10 @@ ReplicateStateMachine可以并发进行多个Paxos共识实例，每个实例递
 数据库一般需要采用[写前日志](https://en.wikipedia.org/wiki/Write-ahead_logging)技术保证事务可恢复。
 
 本应用的PUT、DEL、GET都是幂等的，重复执行没有问题，只要保证不漏掉命令就行，ReplicateStateMachine的执行日志可以保证这一点，
-具体可查看[start](./javadoc/io/github/parliament/ReplicateStateMachine.html#start(io.github.parliament.StateTransfer,java.util.concurrent.Executor))
-和[apply](./javadoc/io/github/parliament/ReplicateStateMachine.html#apply())方法、[done](./javadoc/io/github/parliament/ReplicateStateMachine.html#done(int))方法。
+具体可查看[start](https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#start(io.github.parliament.StateTransfer,java.util.concurrent.Executor))
+和[apply](https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#apply())方法、[done](https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#done(int))方法。
 
-ReplicateStateMachine并发提交共识请求给共识服务[Coordinator](./javadoc/io/github/parliament/Coordinator.html)，
+ReplicateStateMachine并发提交共识请求给共识服务[Coordinator](https://z42y.github.io/parliament/javadoc//io/github/parliament/Coordinator.html)，
 Coordinator可以由各种共识算法实现。
 
 ## 实现Paxos共识算法
@@ -510,20 +512,20 @@ Coordinator可以由各种共识算法实现。
 
 Paxos算法有优化版本，如multi-paxos可以减少一次请求，我们使用原始算法。
 
-[Paxos类](./javadoc/io/github/parliament/paxos/Paxos.html)作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。
+[Paxos类](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/Paxos.html)作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。
 他为每个共识实例创建相应的发起者（proposer)，同时为本节点和其他节点的发起者创建、管理对应的接收者（acceptor)。
 
-[Proposer](./javadoc/io/github/parliament/paxos/proposer/Proposer.html)为发起者实现，
-[LocalAcceptor](./javadoc/io/github/parliament/paxos/acceptor/LocalAcceptor.html)为接收者实现。
+[Proposer](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/proposer/Proposer.html)为发起者实现，
+[LocalAcceptor](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/acceptor/LocalAcceptor.html)为接收者实现。
 
-各个实例的提案请求可能来自其他节点，所以提供一个网络服务[PaxosServer](./javadoc/io/github/parliament/paxos/server/PaxosServer.html)，
+各个实例的提案请求可能来自其他节点，所以提供一个网络服务[PaxosServer](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/server/PaxosServer.html)，
 通过参数中的编号区分不同共识过程实例，转发给不同实例的本地接收者处理，然后返回响应。
 
-配套的，提供[SyncProxyAcceptor](./javadoc/io/github/parliament/paxos/client/SyncProxyAcceptor.html)作为远端接收者的本地网络代理，
+配套的，提供[SyncProxyAcceptor](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/client/SyncProxyAcceptor.html)作为远端接收者的本地网络代理，
 请求各个PaxosServer完成提案过程。
 
-[InetPeerAcceptors](./javadoc/io/github/parliament/paxos/client/InetPeerAcceptors.html)为SyncProxyAceptor的创建工厂，
-使用一个简单的[连接池](./javadoc/io/github/parliament/paxos/client/ConnectionPool.html)为SyncProxyAcceptor提供nio channel实例。
+[InetPeerAcceptors](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/client/InetPeerAcceptors.html)为SyncProxyAceptor的创建工厂，
+使用一个简单的[连接池](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/client/ConnectionPool.html)为SyncProxyAcceptor提供nio channel实例。
 
 接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。
 如prepare方法的代理：
@@ -547,9 +549,9 @@ Prepare delegatePrepare(int round, String n) throws IOException {
 稍后这些多数派又恢复，之前的信息已经丢失，此时又收到同一个共识实例编号的另一个提案，此提案被通过，和未异常退出的节点接受的提案不一致。
 
 所以，在prepare和accept阶段，都需要持久化Acceptor的状态，实例化Acceptor时，先尝试恢复已持久化的状态。
-并通过定期[学习](./javadoc/io/github/parliament/ReplicateStateMachine.html#catchUp())其他节点的共识结果，快速赶上进度。
+并通过定期[学习](https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#catchUp())其他节点的共识结果，快速赶上进度。
 
-如[LocalAcceptor](./javadoc/io/github/parliament/paxos/acceptor/LocalAcceptor.html)的prepare：
+如[LocalAcceptor](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/acceptor/LocalAcceptor.html)的prepare：
 ```{.java}
 @Override
 public synchronized Prepare prepare(String n) throws Exception {
@@ -561,7 +563,7 @@ public synchronized Prepare prepare(String n) throws Exception {
     return Prepare.reject(n);
 }
 ```
-[Paxos类](./javadoc/io/github/parliament/paxos/Paxos.html)保存和恢复acceptor的方法分别如下：
+[Paxos类](https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/Paxos.html)保存和恢复acceptor的方法分别如下：
 ```{.java}
 void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
     if (Strings.isNullOrEmpty(acceptor.getNp())) {
@@ -592,7 +594,7 @@ Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionE
 }
 ```
 
-输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](./javadoc/io/github/parliament/ReplicateStateMachine.html#forget())。
+输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#forget())。
 
 ### 活跃性问题
 根据[FLP不可能原理](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)：
