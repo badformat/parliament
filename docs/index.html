@@ -111,6 +111,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <li><a href="#实现复制状态机">实现复制状态机</a></li>
 <li><a href="#实现paxos共识算法">实现Paxos共识算法</a><ul>
 <li><a href="#正确性保证">正确性保证</a></li>
+<li><a href="#活跃性问题">活跃性问题</a></li>
 </ul></li>
 <li><a href="#总结">总结</a></li>
 </ul></li>
@@ -170,7 +171,20 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <h3 id="skip-list的持久化实现">skip list的持久化实现</h3>
 <p>在内存中实现skip list的数据结构非常简单，使用文件接口的持久化实现则需要考虑很多细节，这里的实现不考虑并发。</p>
 <p>首先需要考虑如何使用文件表示链表结构，每个节点需要知道下一个节点位置， 对于内存实现的skip list，编程语言的指针或引用处理起来非常自然，使用文件实现，我们需要手工分配和管理节点在文件中的地址和存储。</p>
-<p>以skip list的插入操作为例，一种简要的步骤如下： - 获得最上层链表的头节点的文件名称和位置信息，文件名和位置信息可以记录在其他元信息文件中。 - 获得头节点的key值，与参数key比较，以决定继续查找同层下一个节点还是进入下一层链表。 - 节点中key的长度不是固定的，文件中需要区分key值、地址内容，可以使用某固定字段保存key长度，以便程序快速定位。 - 到达底层节点后，寻找插入位置。 - 底层节点需要保存key对应的value值，可以保存在节点中（同样需要使用某个固定字段保存value长度），也可以保存在其他地方，使用地址进行查找，但这样会多一次磁盘寻址操作。 - 待插入位置可能在链表中间，文件接口没有insert之类的操作，为了后续节点不被覆盖，需依次拷贝后续节点到文件中的新位置。 - 更改节点位置后，需要更新相关节点保存的该节点的位置信息。</p>
+<p>以skip list的插入操作为例，一种简要的步骤如下：</p>
+<ul>
+<li>获得最上层链表的头节点的文件名称和位置信息，文件名和位置信息可以记录在其他元信息文件中。</li>
+<li>获得头节点的key值，与参数key比较，以决定继续查找同层下一个节点还是进入下一层链表。
+<ul>
+<li>节点中key的长度不是固定的，文件中需要区分key值、地址内容，可以使用某固定字段保存key长度，以便程序快速定位。</li>
+</ul></li>
+<li>到达底层节点后，寻找插入位置。
+<ul>
+<li>底层节点需要保存key对应的value值，可以保存在节点中（同样需要使用某个固定字段保存value长度），也可以保存在其他地方，使用地址进行查找，但这样会多一次磁盘寻址操作。</li>
+<li>待插入位置可能在链表中间，文件接口没有insert之类的操作，为了后续节点不被覆盖，需依次拷贝后续节点到文件中的新位置。</li>
+<li>更改节点位置后，需要更新相关节点保存的该节点的位置信息。</li>
+</ul></li>
+</ul>
 <p>可以看到，按照文件物理位置进行地址管理，维护位置信息非常麻烦，我们希望新节点的分配不会改变原有节点的物理位置， 同时希望即便更新了相关节点的物理位置后，不用更改其他节点对该节点的引用。</p>
 <p>参考内存管理中不同进程共享相同地址空间的方式，采用一个映射表，对每个节点分配一个唯一编号表示虚拟地址，在映射表中保存该虚拟地址的文件物理位置。 这样，在文件中移动节点后，只需更新映射表中该节点的映射信息。分配新空间时，也不用按照逻辑位置决定物理空间的位置。</p>
 <p>解决了地址问题，该方案另一个问题是效率低下，无论查找和更新，都需要读取很多次磁盘，磁盘的读写时间比内存读写时间高三个数量级。</p>
@@ -333,7 +347,13 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>存在单点故障意味着不能满足我们高可用的目标。</p>
 <h3 id="分布式事务和分布式一致性模型的关系">分布式事务和分布式一致性模型的关系</h3>
 <p>分布式事务为了保证各个参与者的任务要么都成功，要么都取消，而不是为了保证高可用。 分布式事务可以作为实现一致性模型的技术手段。</p>
-<p>此外，在数据库中常提到的ACID的一致性，和分布式一致性也有所不同，参考<a href="https://apple.github.io/foundationdb/consistency.html">foundationdb文档的解释</a> &gt;The “C” in ACID refers to the property that data remains within an application’s integrity constraints. (For example, the constraint that some data and its index are consistent with respect to each other.) &gt;The “C” in CAP relates to a consistency model, which describes the conditions under which write operations from one client become visible to other clients. (One example is the eventual consistency model, in which writes are expected to be consistent across replicas after a sufficiently long period.)</p>
+<p>此外，在数据库中常提到的ACID的一致性，和分布式一致性也有所不同，参考<a href="https://apple.github.io/foundationdb/consistency.html">foundationdb文档的解释</a>。</p>
+<blockquote>
+<p>The “C” in ACID refers to the property that data remains within an application’s integrity constraints. (For example, the constraint that some data and its index are consistent with respect to each other.)</p>
+</blockquote>
+<blockquote>
+<p>The “C” in CAP relates to a consistency model, which describes the conditions under which write operations from one client become visible to other clients. (One example is the eventual consistency model, in which writes are expected to be consistent across replicas after a sufficiently long period.)</p>
+</blockquote>
 <h2 id="复制状态机">复制状态机</h2>
 <p>如果将进程看做一个状态机，那么如果所有输入都相同的情况下，每个状态机的状态一定能达到一致，这就是复制状态机的思想。</p>
 <h3 id="全序广播原子广播">全序广播（原子广播）</h3>
@@ -516,7 +536,9 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <span id="cb11-25"><a href="#cb11-25"></a></span>
 <span id="cb11-26"><a href="#cb11-26"></a>    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));</span>
 <span id="cb11-27"><a href="#cb11-27"></a>}</span></code></pre></div>
-<p>输入一直在增长，需要删除共识服务中已经处理完成的输入，见<a href="./javadoc/io/github/parliament/ReplicateStateMachine.html#forget()">forget方法</a>。 ### 活跃性问题 根据<a href="https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/">FLP不可能原理</a>：</p>
+<p>输入一直在增长，需要删除共识服务中已经处理完成的输入，见<a href="./javadoc/io/github/parliament/ReplicateStateMachine.html#forget()">forget方法</a>。</p>
+<h3 id="活跃性问题">活跃性问题</h3>
+<p>根据<a href="https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/">FLP不可能原理</a>：</p>
 <blockquote>
 <p>任何分布式共识算法，只要有一个进程宕机，剩余的进程存在永远无法达成共识的可能性。</p>
 </blockquote>

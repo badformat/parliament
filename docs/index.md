@@ -92,6 +92,7 @@ skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法
 对于内存实现的skip list，编程语言的指针或引用处理起来非常自然，使用文件实现，我们需要手工分配和管理节点在文件中的地址和存储。
 
 以skip list的插入操作为例，一种简要的步骤如下：
+
 - 获得最上层链表的头节点的文件名称和位置信息，文件名和位置信息可以记录在其他元信息文件中。
 - 获得头节点的key值，与参数key比较，以决定继续查找同层下一个节点还是进入下一层链表。
     - 节点中key的长度不是固定的，文件中需要区分key值、地址内容，可以使用某固定字段保存key长度，以便程序快速定位。
@@ -326,8 +327,10 @@ AtomicFileWriter类实现了原子写入，并在进程启动时进行检查和�
 分布式事务为了保证各个参与者的任务要么都成功，要么都取消，而不是为了保证高可用。
 分布式事务可以作为实现一致性模型的技术手段。
 
-此外，在数据库中常提到的ACID的一致性，和分布式一致性也有所不同，参考[foundationdb文档的解释](https://apple.github.io/foundationdb/consistency.html)
+此外，在数据库中常提到的ACID的一致性，和分布式一致性也有所不同，参考[foundationdb文档的解释](https://apple.github.io/foundationdb/consistency.html)。
+
 >The “C” in ACID refers to the property that data remains within an application’s integrity constraints. (For example, the constraint that some data and its index are consistent with respect to each other.)
+
 >The “C” in CAP relates to a consistency model, which describes the conditions under which write operations from one client become visible to other clients. (One example is the eventual consistency model, in which writes are expected to be consistent across replicas after a sufficiently long period.)
 
 ## 复制状态机
@@ -590,6 +593,7 @@ Optional<LocalAcceptor> regainAcceptor(int round) throws IOException, ExecutionE
 ```
 
 输入一直在增长，需要删除共识服务中已经处理完成的输入，见[forget方法](./javadoc/io/github/parliament/ReplicateStateMachine.html#forget())。
+
 ### 活跃性问题
 根据[FLP不可能原理](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)：
 
