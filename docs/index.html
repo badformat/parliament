@@ -5,16 +5,16 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>分布式系统实践入门：以实现一个分布式键值服务为例</title>
-  <style>
+  <style type="text/css">
       code{white-space: pre-wrap;}
       span.smallcaps{font-variant: small-caps;}
       span.underline{text-decoration: underline;}
       div.column{display: inline-block; vertical-align: top; width: 50%;}
   </style>
-  <style>
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
-code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
+  <style type="text/css">
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -24,16 +24,14 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
 }
-pre.numberSource code
-  { counter-reset: source-line 0; }
-pre.numberSource code > span
-  { position: relative; left: -4em; counter-increment: source-line; }
-pre.numberSource code > span > a:first-child::before
-  { content: counter(source-line);
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(title);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; display: inline-block;
+    border: none; pointer-events: all; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -42,9 +40,9 @@ pre.numberSource code > span > a:first-child::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {   }
+  {  }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+a.sourceLine::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -76,14 +74,12 @@ code span.va { color: #19177c; } /* Variable */
 code span.vs { color: #4070a0; } /* VerbatimString */
 code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
   </style>
-  <!--[if lt IE 9]>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
-  <![endif]-->
 </head>
 <body>
-<nav id="TOC" role="doc-toc">
+<nav id="TOC">
 <ul>
 <li><a href="#分布式系统实践入门以实现一个分布式键值服务为例">分布式系统实践入门：以实现一个分布式键值服务为例</a><ul>
+<li><a href="#前言">前言</a></li>
 <li><a href="#系统功能">系统功能</a></li>
 <li><a href="#接收请求">接收请求</a><ul>
 <li><a href="#java-nio的使用">JAVA NIO的使用</a></li>
@@ -121,29 +117,27 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <blockquote>
 <p>“What I cannot create, I do not understand.” – Richard Feynman</p>
 </blockquote>
-<p>🚧Notice：文档基本完成，各种细节在完善中。</p>
-<p>如果你做过稍微复杂一点的系统，或多或少都知道一些关于分布式的概念或名词，比如：</p>
+<p>🚧注意：非终稿，不定期更新。</p>
+<h2 id="前言">前言</h2>
+<p>如果一个系统提供服务时，需要多台机器参与，这类系统都可以被称为分布式系统。</p>
+<p>存在多台机器的原因有三类：</p>
 <ul>
-<li>副本</li>
-<li>高可用，容错</li>
-<li>两阶段提交、三阶段提交</li>
-<li>幂等</li>
-<li>同步系统、异步系统</li>
-<li>网裂</li>
-<li>CAP理论</li>
-<li>拜占庭问题</li>
-<li>协同攻击问题</li>
-<li>FLP理论</li>
-<li>各种一致性保证：最终一致、因果一致、顺序一致</li>
-<li>复制状态机</li>
-<li>逻辑时钟</li>
-<li>原子广播</li>
-<li>共识及Paxos、Raft、Zab算法</li>
+<li>系统各个模块的所有者、运行环境、架构体系、发布频率等客观条件不同，需要多台机器。</li>
+<li>单机无法满足性能或容量要求，需要多台机器进行横向扩展。</li>
+<li>基于副本（replicate）的容错设计。</li>
 </ul>
-<p>对于需要工程实践经验的工程师来说，最重要的问题是：<strong>实现一个分布式系统，究竟有哪些挑战和应对手段？</strong></p>
+<p>一个大型系统，这三个原因都会存在。</p>
+<p>在一些文档中，容错经常和高可用、灾备混淆。可以通过例子简单的<a href="http://www.ruanyifeng.com/blog/2019/11/fault-tolerance.html">区分</a>：</p>
+<ul>
+<li>容错：系统允许某些错误发生，并且保证在修复前，用户功能不受影响。如大型客机的引擎。</li>
+<li>高可用：系统发生错误后，可以快速恢复。如汽车的备胎。</li>
+<li>灾备：发生故障后（小到硬盘损坏，达到机房火灾），后期业务的恢复能力。如飞船救生舱。</li>
+</ul>
+<p>在软件设计中，“容错”难度较大，实现容错的技术及思想，常常也用在高可用和灾备的设计中。</p>
+<p>那么：<strong>实现一个以容错为目标的分布式系统，有哪些挑战和应对手段？</strong></p>
 <p>出于这样的好奇，作者通过实现一个分布式键值服务，对分布式系统的理论落地、实现难点有了更深认识， 最后总结出此文，覆盖了网络实现、存储实现、paxos算法理解、一致性模型、副本实现等内容。</p>
-<p>项目源码及构建、运行方式请参看👉 ：<a href="https://github.com/z42y/parliament/">项目主页</a>，同时提供了<a href="https://z42y.github.io/parliament/javadoc//index.html">javadoc参考</a>。</p>
-<p>欢迎提issue！🚀</p>
+<p>项目源码及构建、运行方式请参看：<a href="https://github.com/z42y/parliament/">项目主页</a>，同时提供了<a href="https://z42y.github.io/parliament/javadoc//index.html">javadoc参考</a>。</p>
+<p>欢迎在github提出建议！👏</p>
 <h2 id="系统功能">系统功能</h2>
 <p>该服务除了实现常见的“put <em>key</em> <em>value</em>”、“get <em>key</em>”、“del <em>key0</em> [<em>key1</em> …]”操作， 还实现了按范围取值的命令“range <em>begin</em> <em>end</em>”，其中begin和end为开始、结束key值，字典序排序。</p>
 <p>服务使用redis的resp协议进行通信，可以直接使用redis-cli等客户端连接测试，或者使用redis客户端库进行操作。</p>
@@ -173,7 +167,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>skip list（跳表）平均查找和插入时间复杂度都是O(log n)，算法说明见<a href="https://zh.wikipedia.org/wiki/%E8%B7%B3%E8%B7%83%E5%88%97%E8%A1%A8">wikipedia</a>。 该算法通过维护多层链表，依次快速接近查找目标。</p>
 <p>演示（来自Wikipedia）：</p>
 <figure>
-<img src="./skiplist.gif" alt="" /><figcaption>skip list</figcaption>
+<img src="./skiplist.gif" alt="skip list" /><figcaption>skip list</figcaption>
 </figure>
 <h3 id="skip-list的持久化实现">skip list的持久化实现</h3>
 <p>在内存中实现skip list的数据结构非常简单，使用文件接口的持久化实现则需要考虑很多细节，这里的实现不考虑并发。</p>
@@ -214,104 +208,104 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>skiplist.mf保存了每层首节点的编号，由SkipList.init方法进行初始化。</p>
 <p>page被加载到内存后，各个节点转换为JDK NavigableMap包含的条目，以便page中快速查找定位。 skip list的上层节点和底层节点的值含义不同，上层节点的value表示下一个节点所在page的编号，底层节点的value表示真正保存的值。</p>
 <p>不管查询还是写入、删除，都需要先定位节点所在page页面，如查找某key在某层级的page，代码如下：</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">private</span> SkipListPage <span class="fu">findSkipListPageForKey</span>(<span class="dt">byte</span>[] key, <span class="dt">int</span> lv) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb2-2"><a href="#cb2-2"></a>    Preconditions.<span class="fu">checkArgument</span>(lv &gt;= <span class="dv">0</span>);</span>
-<span id="cb2-3"><a href="#cb2-3"></a>    Preconditions.<span class="fu">checkArgument</span>(lv &lt; SkipList.<span class="fu">this</span>.<span class="fu">height</span>);</span>
-<span id="cb2-4"><a href="#cb2-4"></a>    <span class="dt">int</span> cursor = height - <span class="dv">1</span>;</span>
-<span id="cb2-5"><a href="#cb2-5"></a>    SkipListPage start = <span class="kw">null</span>;</span>
-<span id="cb2-6"><a href="#cb2-6"></a>    SkipListPage up = <span class="kw">null</span>;</span>
-<span id="cb2-7"><a href="#cb2-7"></a>    <span class="kw">while</span> (cursor &gt;= lv) {</span>
-<span id="cb2-8"><a href="#cb2-8"></a>        up = start;</span>
-<span id="cb2-9"><a href="#cb2-9"></a>        <span class="kw">if</span> (start == <span class="kw">null</span>) {</span>
-<span id="cb2-10"><a href="#cb2-10"></a>            start = skipListPages.<span class="fu">get</span>(startPages[cursor]);</span>
-<span id="cb2-11"><a href="#cb2-11"></a>        }</span>
-<span id="cb2-12"><a href="#cb2-12"></a>        SkipListPage slice = <span class="fu">floorPage</span>(start, key);</span>
-<span id="cb2-13"><a href="#cb2-13"></a></span>
-<span id="cb2-14"><a href="#cb2-14"></a>        <span class="kw">if</span> (cursor == lv) {</span>
-<span id="cb2-15"><a href="#cb2-15"></a>            <span class="kw">return</span> slice == <span class="kw">null</span> ? start : slice;</span>
-<span id="cb2-16"><a href="#cb2-16"></a>        }</span>
-<span id="cb2-17"><a href="#cb2-17"></a>        <span class="kw">if</span> (slice != <span class="kw">null</span>) {</span>
-<span id="cb2-18"><a href="#cb2-18"></a>            <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; e = slice.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</span>
-<span id="cb2-19"><a href="#cb2-19"></a>            <span class="dt">int</span> pn = <span class="bu">ByteBuffer</span>.<span class="fu">wrap</span>(e.<span class="fu">getValue</span>()).<span class="fu">getInt</span>();</span>
-<span id="cb2-20"><a href="#cb2-20"></a>            start = skipListPages.<span class="fu">get</span>(pn);</span>
-<span id="cb2-21"><a href="#cb2-21"></a>            start.<span class="fu">setSuperPage</span>(up);</span>
-<span id="cb2-22"><a href="#cb2-22"></a>        } <span class="kw">else</span> {</span>
-<span id="cb2-23"><a href="#cb2-23"></a>            start = <span class="kw">null</span>;</span>
-<span id="cb2-24"><a href="#cb2-24"></a>        }</span>
-<span id="cb2-25"><a href="#cb2-25"></a></span>
-<span id="cb2-26"><a href="#cb2-26"></a>        cursor--;</span>
-<span id="cb2-27"><a href="#cb2-27"></a>    }</span>
-<span id="cb2-28"><a href="#cb2-28"></a></span>
-<span id="cb2-29"><a href="#cb2-29"></a>    <span class="kw">return</span> start;</span>
-<span id="cb2-30"><a href="#cb2-30"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb2-1" title="1"><span class="kw">private</span> SkipListPage <span class="fu">findSkipListPageForKey</span>(<span class="dt">byte</span>[] key, <span class="dt">int</span> lv) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
+<a class="sourceLine" id="cb2-2" title="2">    Preconditions.<span class="fu">checkArgument</span>(lv &gt;= <span class="dv">0</span>);</a>
+<a class="sourceLine" id="cb2-3" title="3">    Preconditions.<span class="fu">checkArgument</span>(lv &lt; SkipList.<span class="fu">this</span>.<span class="fu">height</span>);</a>
+<a class="sourceLine" id="cb2-4" title="4">    <span class="dt">int</span> cursor = height - <span class="dv">1</span>;</a>
+<a class="sourceLine" id="cb2-5" title="5">    SkipListPage start = <span class="kw">null</span>;</a>
+<a class="sourceLine" id="cb2-6" title="6">    SkipListPage up = <span class="kw">null</span>;</a>
+<a class="sourceLine" id="cb2-7" title="7">    <span class="kw">while</span> (cursor &gt;= lv) {</a>
+<a class="sourceLine" id="cb2-8" title="8">        up = start;</a>
+<a class="sourceLine" id="cb2-9" title="9">        <span class="kw">if</span> (start == <span class="kw">null</span>) {</a>
+<a class="sourceLine" id="cb2-10" title="10">            start = skipListPages.<span class="fu">get</span>(startPages[cursor]);</a>
+<a class="sourceLine" id="cb2-11" title="11">        }</a>
+<a class="sourceLine" id="cb2-12" title="12">        SkipListPage slice = <span class="fu">floorPage</span>(start, key);</a>
+<a class="sourceLine" id="cb2-13" title="13"></a>
+<a class="sourceLine" id="cb2-14" title="14">        <span class="kw">if</span> (cursor == lv) {</a>
+<a class="sourceLine" id="cb2-15" title="15">            <span class="kw">return</span> slice == <span class="kw">null</span> ? start : slice;</a>
+<a class="sourceLine" id="cb2-16" title="16">        }</a>
+<a class="sourceLine" id="cb2-17" title="17">        <span class="kw">if</span> (slice != <span class="kw">null</span>) {</a>
+<a class="sourceLine" id="cb2-18" title="18">            <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; e = slice.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</a>
+<a class="sourceLine" id="cb2-19" title="19">            <span class="dt">int</span> pn = <span class="bu">ByteBuffer</span>.<span class="fu">wrap</span>(e.<span class="fu">getValue</span>()).<span class="fu">getInt</span>();</a>
+<a class="sourceLine" id="cb2-20" title="20">            start = skipListPages.<span class="fu">get</span>(pn);</a>
+<a class="sourceLine" id="cb2-21" title="21">            start.<span class="fu">setSuperPage</span>(up);</a>
+<a class="sourceLine" id="cb2-22" title="22">        } <span class="kw">else</span> {</a>
+<a class="sourceLine" id="cb2-23" title="23">            start = <span class="kw">null</span>;</a>
+<a class="sourceLine" id="cb2-24" title="24">        }</a>
+<a class="sourceLine" id="cb2-25" title="25"></a>
+<a class="sourceLine" id="cb2-26" title="26">        cursor--;</a>
+<a class="sourceLine" id="cb2-27" title="27">    }</a>
+<a class="sourceLine" id="cb2-28" title="28"></a>
+<a class="sourceLine" id="cb2-29" title="29">    <span class="kw">return</span> start;</a>
+<a class="sourceLine" id="cb2-30" title="30">}</a></code></pre></div>
 <p>这个方法还负责更新相关page的上一层page信息。</p>
 <p>floorPage从指定page开始查找拥有最后一个小于等于待查找值的key所在的page，实现如下：</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">private</span> SkipListPage <span class="fu">floorPage</span>(SkipListPage start, <span class="dt">byte</span>[] key) <span class="kw">throws</span> <span class="bu">ExecutionException</span> {</span>
-<span id="cb3-2"><a href="#cb3-2"></a>    SkipListPage current = start;</span>
-<span id="cb3-3"><a href="#cb3-3"></a>    SkipListPage floor = <span class="kw">null</span>;</span>
-<span id="cb3-4"><a href="#cb3-4"></a>    <span class="kw">while</span> (current != <span class="kw">null</span>) {</span>
-<span id="cb3-5"><a href="#cb3-5"></a>        <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; entry = current.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</span>
-<span id="cb3-6"><a href="#cb3-6"></a>        <span class="kw">if</span> (entry != <span class="kw">null</span>) {</span>
-<span id="cb3-7"><a href="#cb3-7"></a>            <span class="co">// 只是在本page发现小于key的记录，还需检查下一页。</span></span>
-<span id="cb3-8"><a href="#cb3-8"></a>            floor = current;</span>
-<span id="cb3-9"><a href="#cb3-9"></a>        }</span>
-<span id="cb3-10"><a href="#cb3-10"></a></span>
-<span id="cb3-11"><a href="#cb3-11"></a>        <span class="kw">if</span> (current.<span class="fu">getRightPageNo</span>() &gt; <span class="dv">0</span>) {</span>
-<span id="cb3-12"><a href="#cb3-12"></a>            <span class="dt">int</span> pn = current.<span class="fu">getRightPageNo</span>();</span>
-<span id="cb3-13"><a href="#cb3-13"></a>            current = skipListPages.<span class="fu">get</span>(pn);</span>
-<span id="cb3-14"><a href="#cb3-14"></a>        } <span class="kw">else</span> {</span>
-<span id="cb3-15"><a href="#cb3-15"></a>            current = <span class="kw">null</span>;</span>
-<span id="cb3-16"><a href="#cb3-16"></a>        }</span>
-<span id="cb3-17"><a href="#cb3-17"></a>    }</span>
-<span id="cb3-18"><a href="#cb3-18"></a>    <span class="kw">return</span> floor;</span>
-<span id="cb3-19"><a href="#cb3-19"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb3-1" title="1"><span class="kw">private</span> SkipListPage <span class="fu">floorPage</span>(SkipListPage start, <span class="dt">byte</span>[] key) <span class="kw">throws</span> <span class="bu">ExecutionException</span> {</a>
+<a class="sourceLine" id="cb3-2" title="2">    SkipListPage current = start;</a>
+<a class="sourceLine" id="cb3-3" title="3">    SkipListPage floor = <span class="kw">null</span>;</a>
+<a class="sourceLine" id="cb3-4" title="4">    <span class="kw">while</span> (current != <span class="kw">null</span>) {</a>
+<a class="sourceLine" id="cb3-5" title="5">        <span class="bu">Map</span>.<span class="fu">Entry</span>&lt;<span class="dt">byte</span>[], <span class="dt">byte</span>[]&gt; entry = current.<span class="fu">map</span>.<span class="fu">floorEntry</span>(key);</a>
+<a class="sourceLine" id="cb3-6" title="6">        <span class="kw">if</span> (entry != <span class="kw">null</span>) {</a>
+<a class="sourceLine" id="cb3-7" title="7">            <span class="co">// 只是在本page发现小于key的记录，还需检查下一页。</span></a>
+<a class="sourceLine" id="cb3-8" title="8">            floor = current;</a>
+<a class="sourceLine" id="cb3-9" title="9">        }</a>
+<a class="sourceLine" id="cb3-10" title="10"></a>
+<a class="sourceLine" id="cb3-11" title="11">        <span class="kw">if</span> (current.<span class="fu">getRightPageNo</span>() &gt; <span class="dv">0</span>) {</a>
+<a class="sourceLine" id="cb3-12" title="12">            <span class="dt">int</span> pn = current.<span class="fu">getRightPageNo</span>();</a>
+<a class="sourceLine" id="cb3-13" title="13">            current = skipListPages.<span class="fu">get</span>(pn);</a>
+<a class="sourceLine" id="cb3-14" title="14">        } <span class="kw">else</span> {</a>
+<a class="sourceLine" id="cb3-15" title="15">            current = <span class="kw">null</span>;</a>
+<a class="sourceLine" id="cb3-16" title="16">        }</a>
+<a class="sourceLine" id="cb3-17" title="17">    }</a>
+<a class="sourceLine" id="cb3-18" title="18">    <span class="kw">return</span> floor;</a>
+<a class="sourceLine" id="cb3-19" title="19">}</a></code></pre></div>
 <p>注意，如果在该page对应map未找到大于查找值的记录，还需要到下一个page查找。</p>
 <h3 id="skiplist的更新">SkipList的更新</h3>
 <p>更新一个节点前，先使用以上方法查找、加载待插入的page，更新相关map，再使用SkipListPage.update更新文件，代码如下：</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">private</span> <span class="dt">void</span> <span class="fu">update</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb4-2"><a href="#cb4-2"></a>    <span class="dt">int</span> s = HEAD_SIZE_IN_PAGE;</span>
-<span id="cb4-3"><a href="#cb4-3"></a>    <span class="dt">int</span> k = <span class="dv">0</span>;</span>
-<span id="cb4-4"><a href="#cb4-4"></a></span>
-<span id="cb4-5"><a href="#cb4-5"></a>    <span class="kw">for</span> (<span class="dt">byte</span>[] key : map.<span class="fu">keySet</span>()) {</span>
-<span id="cb4-6"><a href="#cb4-6"></a>        s += key.<span class="fu">length</span>;</span>
-<span id="cb4-7"><a href="#cb4-7"></a>        s += <span class="dv">4</span>;</span>
-<span id="cb4-8"><a href="#cb4-8"></a>        s += map.<span class="fu">get</span>(key).<span class="fu">length</span>;</span>
-<span id="cb4-9"><a href="#cb4-9"></a>        <span class="kw">if</span> (isLeaf) {</span>
-<span id="cb4-10"><a href="#cb4-10"></a>            s += <span class="dv">4</span>;</span>
-<span id="cb4-11"><a href="#cb4-11"></a>        }</span>
-<span id="cb4-12"><a href="#cb4-12"></a>        k++;</span>
-<span id="cb4-13"><a href="#cb4-13"></a>    }</span>
-<span id="cb4-14"><a href="#cb4-14"></a>    size = s;</span>
-<span id="cb4-15"><a href="#cb4-15"></a>    keys = k;</span>
-<span id="cb4-16"><a href="#cb4-16"></a>    <span class="kw">if</span> (keys == <span class="dv">0</span>) {</span>
-<span id="cb4-17"><a href="#cb4-17"></a>        pager.<span class="fu">recycle</span>(page);</span>
-<span id="cb4-18"><a href="#cb4-18"></a>    }</span>
-<span id="cb4-19"><a href="#cb4-19"></a></span>
-<span id="cb4-20"><a href="#cb4-20"></a>    <span class="kw">if</span> (<span class="fu">remaining</span>() &lt; <span class="dv">0</span>) {</span>
-<span id="cb4-21"><a href="#cb4-21"></a>        <span class="fu">split</span>();</span>
-<span id="cb4-22"><a href="#cb4-22"></a>    } <span class="kw">else</span> {</span>
-<span id="cb4-23"><a href="#cb4-23"></a>        <span class="fu">sync</span>();</span>
-<span id="cb4-24"><a href="#cb4-24"></a>    }</span>
-<span id="cb4-25"><a href="#cb4-25"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb4-1" title="1"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">update</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
+<a class="sourceLine" id="cb4-2" title="2">    <span class="dt">int</span> s = HEAD_SIZE_IN_PAGE;</a>
+<a class="sourceLine" id="cb4-3" title="3">    <span class="dt">int</span> k = <span class="dv">0</span>;</a>
+<a class="sourceLine" id="cb4-4" title="4"></a>
+<a class="sourceLine" id="cb4-5" title="5">    <span class="kw">for</span> (<span class="dt">byte</span>[] key : map.<span class="fu">keySet</span>()) {</a>
+<a class="sourceLine" id="cb4-6" title="6">        s += key.<span class="fu">length</span>;</a>
+<a class="sourceLine" id="cb4-7" title="7">        s += <span class="dv">4</span>;</a>
+<a class="sourceLine" id="cb4-8" title="8">        s += map.<span class="fu">get</span>(key).<span class="fu">length</span>;</a>
+<a class="sourceLine" id="cb4-9" title="9">        <span class="kw">if</span> (isLeaf) {</a>
+<a class="sourceLine" id="cb4-10" title="10">            s += <span class="dv">4</span>;</a>
+<a class="sourceLine" id="cb4-11" title="11">        }</a>
+<a class="sourceLine" id="cb4-12" title="12">        k++;</a>
+<a class="sourceLine" id="cb4-13" title="13">    }</a>
+<a class="sourceLine" id="cb4-14" title="14">    size = s;</a>
+<a class="sourceLine" id="cb4-15" title="15">    keys = k;</a>
+<a class="sourceLine" id="cb4-16" title="16">    <span class="kw">if</span> (keys == <span class="dv">0</span>) {</a>
+<a class="sourceLine" id="cb4-17" title="17">        pager.<span class="fu">recycle</span>(page);</a>
+<a class="sourceLine" id="cb4-18" title="18">    }</a>
+<a class="sourceLine" id="cb4-19" title="19"></a>
+<a class="sourceLine" id="cb4-20" title="20">    <span class="kw">if</span> (<span class="fu">remaining</span>() &lt; <span class="dv">0</span>) {</a>
+<a class="sourceLine" id="cb4-21" title="21">        <span class="fu">split</span>();</a>
+<a class="sourceLine" id="cb4-22" title="22">    } <span class="kw">else</span> {</a>
+<a class="sourceLine" id="cb4-23" title="23">        <span class="fu">sync</span>();</a>
+<a class="sourceLine" id="cb4-24" title="24">    }</a>
+<a class="sourceLine" id="cb4-25" title="25">}</a></code></pre></div>
 <p>如上所述，如果page不在包含数据，则回收，如数据已超过page大小，则分裂page，分裂方法为分配一个page，并将除头节点以外的节点存储到新page即可。</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">private</span> <span class="dt">void</span> <span class="fu">split</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb5-2"><a href="#cb5-2"></a>    Preconditions.<span class="fu">checkState</span>(<span class="kw">this</span>.<span class="fu">keys</span> &gt; <span class="dv">0</span>);</span>
-<span id="cb5-3"><a href="#cb5-3"></a>    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</span>
-<span id="cb5-4"><a href="#cb5-4"></a>    Page p = SkipList.<span class="fu">this</span>.<span class="fu">allocatePage</span>(level);</span>
-<span id="cb5-5"><a href="#cb5-5"></a>    SkipListPage newPage = skipListPages.<span class="fu">get</span>(p.<span class="fu">getNo</span>());</span>
-<span id="cb5-6"><a href="#cb5-6"></a></span>
-<span id="cb5-7"><a href="#cb5-7"></a>    newPage.<span class="fu">map</span> = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">tailMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">false</span>));</span>
-<span id="cb5-8"><a href="#cb5-8"></a>    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</span>
-<span id="cb5-9"><a href="#cb5-9"></a>    map = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">headMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">true</span>));</span>
-<span id="cb5-10"><a href="#cb5-10"></a>    newPage.<span class="fu">rightPageNo</span> = <span class="kw">this</span>.<span class="fu">rightPageNo</span>;</span>
-<span id="cb5-11"><a href="#cb5-11"></a>    <span class="kw">this</span>.<span class="fu">rightPageNo</span> = newPage.<span class="fu">getPage</span>().<span class="fu">getNo</span>();</span>
-<span id="cb5-12"><a href="#cb5-12"></a></span>
-<span id="cb5-13"><a href="#cb5-13"></a>    <span class="kw">this</span>.<span class="fu">update</span>();</span>
-<span id="cb5-14"><a href="#cb5-14"></a>    newPage.<span class="fu">update</span>();</span>
-<span id="cb5-15"><a href="#cb5-15"></a></span>
-<span id="cb5-16"><a href="#cb5-16"></a>    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - <span class="kw">this</span>.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</span>
-<span id="cb5-17"><a href="#cb5-17"></a>    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - newPage.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</span>
-<span id="cb5-18"><a href="#cb5-18"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb5-1" title="1"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">split</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
+<a class="sourceLine" id="cb5-2" title="2">    Preconditions.<span class="fu">checkState</span>(<span class="kw">this</span>.<span class="fu">keys</span> &gt; <span class="dv">0</span>);</a>
+<a class="sourceLine" id="cb5-3" title="3">    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</a>
+<a class="sourceLine" id="cb5-4" title="4">    Page p = SkipList.<span class="fu">this</span>.<span class="fu">allocatePage</span>(level);</a>
+<a class="sourceLine" id="cb5-5" title="5">    SkipListPage newPage = skipListPages.<span class="fu">get</span>(p.<span class="fu">getNo</span>());</a>
+<a class="sourceLine" id="cb5-6" title="6"></a>
+<a class="sourceLine" id="cb5-7" title="7">    newPage.<span class="fu">map</span> = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">tailMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">false</span>));</a>
+<a class="sourceLine" id="cb5-8" title="8">    Preconditions.<span class="fu">checkState</span>(!map.<span class="fu">isEmpty</span>());</a>
+<a class="sourceLine" id="cb5-9" title="9">    map = <span class="kw">new</span> <span class="bu">ConcurrentSkipListMap</span>&lt;&gt;(map.<span class="fu">headMap</span>(map.<span class="fu">firstKey</span>(), <span class="kw">true</span>));</a>
+<a class="sourceLine" id="cb5-10" title="10">    newPage.<span class="fu">rightPageNo</span> = <span class="kw">this</span>.<span class="fu">rightPageNo</span>;</a>
+<a class="sourceLine" id="cb5-11" title="11">    <span class="kw">this</span>.<span class="fu">rightPageNo</span> = newPage.<span class="fu">getPage</span>().<span class="fu">getNo</span>();</a>
+<a class="sourceLine" id="cb5-12" title="12"></a>
+<a class="sourceLine" id="cb5-13" title="13">    <span class="kw">this</span>.<span class="fu">update</span>();</a>
+<a class="sourceLine" id="cb5-14" title="14">    newPage.<span class="fu">update</span>();</a>
+<a class="sourceLine" id="cb5-15" title="15"></a>
+<a class="sourceLine" id="cb5-16" title="16">    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - <span class="kw">this</span>.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</a>
+<a class="sourceLine" id="cb5-17" title="17">    Preconditions.<span class="fu">checkState</span>(pager.<span class="fu">getPageSize</span>() - newPage.<span class="fu">getSize</span>() &gt;= <span class="dv">0</span>);</a>
+<a class="sourceLine" id="cb5-18" title="18">}</a></code></pre></div>
 <p>注意，文件写入不是原子的，可能只写入了部分数据便宕机了，不完整的数据会导致进程无法恢复原有状态， ，persistence()需要保证要么完全写入，要么完全不写，</p>
 <p>AtomicFileWriter类实现了原子写入，并在进程启动时进行检查和恢复。</p>
 <h2 id="容错与高可用">容错与高可用</h2>
@@ -433,25 +427,25 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </ol>
 <h2 id="实现复制状态机">实现复制状态机</h2>
 <p><a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/kv/KeyValueEngine.html">KeyValueEngine</a>收到请求，不会立即执行， 而是交给<a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html">ReplicateStateMachine</a>生成一个新的状态机输入， 并委托ReplicateStateMachine对该输入所在编号的操作达成共识，由ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1"></a>Input input = rsm.<span class="fu">newState</span>(bytes);</span>
-<span id="cb6-2"><a href="#cb6-2"></a>CompletableFuture&lt;Output&gt; future = rsm.<span class="fu">submit</span>(input);</span>
-<span id="cb6-3"><a href="#cb6-3"></a><span class="kw">return</span> future.<span class="fu">thenApply</span>((output) -&gt; {</span>
-<span id="cb6-4"><a href="#cb6-4"></a>    <span class="kw">try</span> {</span>
-<span id="cb6-5"><a href="#cb6-5"></a>        <span class="kw">if</span> (!<span class="bu">Arrays</span>.<span class="fu">equals</span>(input.<span class="fu">getUuid</span>(), output.<span class="fu">getUuid</span>())) {</span>
-<span id="cb6-6"><a href="#cb6-6"></a>            <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;共识冲突&quot;</span>);</span>
-<span id="cb6-7"><a href="#cb6-7"></a>        }</span>
-<span id="cb6-8"><a href="#cb6-8"></a>        <span class="kw">return</span> RespDecoder.<span class="fu">create</span>().<span class="fu">decode</span>(output.<span class="fu">getContent</span>()).<span class="fu">get</span>();</span>
-<span id="cb6-9"><a href="#cb6-9"></a>    } <span class="kw">catch</span> (<span class="bu">Exception</span> e) {</span>
-<span id="cb6-10"><a href="#cb6-10"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;get submit result failed:&quot;</span>, e);</span>
-<span id="cb6-11"><a href="#cb6-11"></a>        <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;get submit result failed:&quot;</span> + e.<span class="fu">getClass</span>().<span class="fu">getName</span>()</span>
-<span id="cb6-12"><a href="#cb6-12"></a>                + <span class="st">&quot;,message:&quot;</span> + e.<span class="fu">getMessage</span>());</span>
-<span id="cb6-13"><a href="#cb6-13"></a>    }</span>
-<span id="cb6-14"><a href="#cb6-14"></a>});</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb6-1" title="1">Input input = rsm.<span class="fu">newState</span>(bytes);</a>
+<a class="sourceLine" id="cb6-2" title="2">CompletableFuture&lt;Output&gt; future = rsm.<span class="fu">submit</span>(input);</a>
+<a class="sourceLine" id="cb6-3" title="3"><span class="kw">return</span> future.<span class="fu">thenApply</span>((output) -&gt; {</a>
+<a class="sourceLine" id="cb6-4" title="4">    <span class="kw">try</span> {</a>
+<a class="sourceLine" id="cb6-5" title="5">        <span class="kw">if</span> (!<span class="bu">Arrays</span>.<span class="fu">equals</span>(input.<span class="fu">getUuid</span>(), output.<span class="fu">getUuid</span>())) {</a>
+<a class="sourceLine" id="cb6-6" title="6">            <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;共识冲突&quot;</span>);</a>
+<a class="sourceLine" id="cb6-7" title="7">        }</a>
+<a class="sourceLine" id="cb6-8" title="8">        <span class="kw">return</span> RespDecoder.<span class="fu">create</span>().<span class="fu">decode</span>(output.<span class="fu">getContent</span>()).<span class="fu">get</span>();</a>
+<a class="sourceLine" id="cb6-9" title="9">    } <span class="kw">catch</span> (<span class="bu">Exception</span> e) {</a>
+<a class="sourceLine" id="cb6-10" title="10">        logger.<span class="fu">error</span>(<span class="st">&quot;get submit result failed:&quot;</span>, e);</a>
+<a class="sourceLine" id="cb6-11" title="11">        <span class="kw">return</span> RespError.<span class="fu">withUTF8</span>(<span class="st">&quot;get submit result failed:&quot;</span> + e.<span class="fu">getClass</span>().<span class="fu">getName</span>()</a>
+<a class="sourceLine" id="cb6-12" title="12">                + <span class="st">&quot;,message:&quot;</span> + e.<span class="fu">getMessage</span>());</a>
+<a class="sourceLine" id="cb6-13" title="13">    }</a>
+<a class="sourceLine" id="cb6-14" title="14">});</a></code></pre></div>
 <p>如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。</p>
 <p>这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的“append x y”请求如不加id会达成一次共识，但实际只执行了一次， value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1"></a><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {</span>
-<span id="cb7-2"><a href="#cb7-2"></a>    <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();</span>
-<span id="cb7-3"><a href="#cb7-3"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb7-1" title="1"><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {</a>
+<a class="sourceLine" id="cb7-2" title="2">    <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();</a>
+<a class="sourceLine" id="cb7-3" title="3">}</a></code></pre></div>
 <p>ReplicateStateMachine可以并发进行多个Paxos共识实例，每个实例递增分配一个编号，所有RSM实例都按照编号顺序，使用后台线程顺序执行所有编号的共识结果。</p>
 <p>顺序执行意味着KeyValueEngine无法并发处理已完成共识的各个请求，如果需要提高并发性，需要保证不同机器并发执行的结果一样，这是比较困难的， 需要完善各种锁机制和并发控制，这里不做实现。</p>
 <p>进程可能在KeyValueEngine执行数据操作命令过程中失败，或者执行完成，但在返回ReplicateStateMachine前失败，服务需要在恢复时恢复之前的正确状态。 数据库一般需要采用<a href="https://en.wikipedia.org/wiki/Write-ahead_logging">写前日志</a>技术保证事务可恢复。</p>
@@ -501,58 +495,58 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>配套的，提供<a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/client/SyncProxyAcceptor.html">SyncProxyAcceptor</a>作为远端接收者的本地网络代理， 请求各个PaxosServer完成提案过程。</p>
 <p><a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/client/InetPeerAcceptors.html">InetPeerAcceptors</a>为SyncProxyAceptor的创建工厂， 使用一个简单的<a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/client/ConnectionPool.html">连接池</a>为SyncProxyAcceptor提供nio channel实例。</p>
 <p>接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。 如prepare方法的代理：</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1"></a>Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {</span>
-<span id="cb9-2"><a href="#cb9-2"></a>    <span class="kw">synchronized</span> (channel) {</span>
-<span id="cb9-3"><a href="#cb9-3"></a>        <span class="bu">ByteBuffer</span> request = codec.<span class="fu">encodePrepare</span>(round, n);</span>
-<span id="cb9-4"><a href="#cb9-4"></a>        <span class="kw">while</span> (request.<span class="fu">hasRemaining</span>()) {</span>
-<span id="cb9-5"><a href="#cb9-5"></a>            channel.<span class="fu">write</span>(request);</span>
-<span id="cb9-6"><a href="#cb9-6"></a>        }</span>
-<span id="cb9-7"><a href="#cb9-7"></a></span>
-<span id="cb9-8"><a href="#cb9-8"></a>        <span class="kw">return</span> codec.<span class="fu">decodePrepare</span>(channel, n);</span>
-<span id="cb9-9"><a href="#cb9-9"></a>    }</span>
-<span id="cb9-10"><a href="#cb9-10"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb9-1" title="1">Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {</a>
+<a class="sourceLine" id="cb9-2" title="2">    <span class="kw">synchronized</span> (channel) {</a>
+<a class="sourceLine" id="cb9-3" title="3">        <span class="bu">ByteBuffer</span> request = codec.<span class="fu">encodePrepare</span>(round, n);</a>
+<a class="sourceLine" id="cb9-4" title="4">        <span class="kw">while</span> (request.<span class="fu">hasRemaining</span>()) {</a>
+<a class="sourceLine" id="cb9-5" title="5">            channel.<span class="fu">write</span>(request);</a>
+<a class="sourceLine" id="cb9-6" title="6">        }</a>
+<a class="sourceLine" id="cb9-7" title="7"></a>
+<a class="sourceLine" id="cb9-8" title="8">        <span class="kw">return</span> codec.<span class="fu">decodePrepare</span>(channel, n);</a>
+<a class="sourceLine" id="cb9-9" title="9">    }</a>
+<a class="sourceLine" id="cb9-10" title="10">}</a></code></pre></div>
 <h3 id="正确性保证">正确性保证</h3>
 <p>上面的伪代码很简单，但是在进程可能异常退出的情况下，是不够完备的。进程被杀死、断电都会导致正在共识协商的进程退出，并在恢复后，出现错误的结果。</p>
 <p>举个例子，多数派为某个编号的共识实例通过了一个提案，但是在decide阶段，多数派全部异常退出，只有多数派以外的节点处理了提案结果。 稍后这些多数派又恢复，之前的信息已经丢失，此时又收到同一个共识实例编号的另一个提案，此提案被通过，和未异常退出的节点接受的提案不一致。</p>
 <p>所以，在prepare和accept阶段，都需要持久化Acceptor的状态，实例化Acceptor时，先尝试恢复已持久化的状态。 并通过定期<a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#catchUp()">学习</a>其他节点的共识结果，快速赶上进度。</p>
 <p>如<a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/acceptor/LocalAcceptor.html">LocalAcceptor</a>的prepare：</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1"></a><span class="at">@Override</span></span>
-<span id="cb10-2"><a href="#cb10-2"></a><span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {</span>
-<span id="cb10-3"><a href="#cb10-3"></a>    <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {</span>
-<span id="cb10-4"><a href="#cb10-4"></a>        np = n;</span>
-<span id="cb10-5"><a href="#cb10-5"></a>        <span class="fu">persistence</span>(); <span class="co">// 保存状态</span></span>
-<span id="cb10-6"><a href="#cb10-6"></a>        <span class="kw">return</span> Prepare.<span class="fu">ok</span>(n, na, va);</span>
-<span id="cb10-7"><a href="#cb10-7"></a>    }</span>
-<span id="cb10-8"><a href="#cb10-8"></a>    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);</span>
-<span id="cb10-9"><a href="#cb10-9"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb10-1" title="1"><span class="at">@Override</span></a>
+<a class="sourceLine" id="cb10-2" title="2"><span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {</a>
+<a class="sourceLine" id="cb10-3" title="3">    <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {</a>
+<a class="sourceLine" id="cb10-4" title="4">        np = n;</a>
+<a class="sourceLine" id="cb10-5" title="5">        <span class="fu">persistence</span>(); <span class="co">// 保存状态</span></a>
+<a class="sourceLine" id="cb10-6" title="6">        <span class="kw">return</span> Prepare.<span class="fu">ok</span>(n, na, va);</a>
+<a class="sourceLine" id="cb10-7" title="7">    }</a>
+<a class="sourceLine" id="cb10-8" title="8">    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);</a>
+<a class="sourceLine" id="cb10-9" title="9">}</a></code></pre></div>
 <p><a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/paxos/Paxos.html">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1"></a><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb11-2"><a href="#cb11-2"></a>    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {</span>
-<span id="cb11-3"><a href="#cb11-3"></a>        <span class="kw">return</span>;</span>
-<span id="cb11-4"><a href="#cb11-4"></a>    }</span>
-<span id="cb11-5"><a href="#cb11-5"></a>    persistence.<span class="fu">put</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNp</span>().<span class="fu">getBytes</span>());</span>
-<span id="cb11-6"><a href="#cb11-6"></a>    <span class="kw">if</span> (!Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNa</span>())) {</span>
-<span id="cb11-7"><a href="#cb11-7"></a>        persistence.<span class="fu">put</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNa</span>().<span class="fu">getBytes</span>());</span>
-<span id="cb11-8"><a href="#cb11-8"></a>    }</span>
-<span id="cb11-9"><a href="#cb11-9"></a>    <span class="kw">if</span> (acceptor.<span class="fu">getVa</span>() != <span class="kw">null</span>) {</span>
-<span id="cb11-10"><a href="#cb11-10"></a>        persistence.<span class="fu">put</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getVa</span>());</span>
-<span id="cb11-11"><a href="#cb11-11"></a>    }</span>
-<span id="cb11-12"><a href="#cb11-12"></a>}</span>
-<span id="cb11-13"><a href="#cb11-13"></a></span>
-<span id="cb11-14"><a href="#cb11-14"></a>Optional&lt;LocalAcceptor&gt; <span class="fu">regainAcceptor</span>(<span class="dt">int</span> round) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</span>
-<span id="cb11-15"><a href="#cb11-15"></a>    <span class="dt">byte</span>[] np = persistence.<span class="fu">get</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>());</span>
-<span id="cb11-16"><a href="#cb11-16"></a></span>
-<span id="cb11-17"><a href="#cb11-17"></a>    <span class="kw">if</span> (np == <span class="kw">null</span>) {</span>
-<span id="cb11-18"><a href="#cb11-18"></a>        <span class="kw">return</span> Optional.<span class="fu">empty</span>();</span>
-<span id="cb11-19"><a href="#cb11-19"></a>    }</span>
-<span id="cb11-20"><a href="#cb11-20"></a>    <span class="dt">byte</span>[] na = persistence.<span class="fu">get</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>());</span>
-<span id="cb11-21"><a href="#cb11-21"></a>    <span class="dt">byte</span>[] va = persistence.<span class="fu">get</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>());</span>
-<span id="cb11-22"><a href="#cb11-22"></a></span>
-<span id="cb11-23"><a href="#cb11-23"></a>    <span class="bu">String</span> nps = <span class="kw">new</span> <span class="bu">String</span>(np);</span>
-<span id="cb11-24"><a href="#cb11-24"></a>    <span class="bu">String</span> nas = na == <span class="kw">null</span> ? <span class="kw">null</span> : <span class="kw">new</span> <span class="bu">String</span>(na);</span>
-<span id="cb11-25"><a href="#cb11-25"></a></span>
-<span id="cb11-26"><a href="#cb11-26"></a>    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));</span>
-<span id="cb11-27"><a href="#cb11-27"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb11-1" title="1"><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
+<a class="sourceLine" id="cb11-2" title="2">    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {</a>
+<a class="sourceLine" id="cb11-3" title="3">        <span class="kw">return</span>;</a>
+<a class="sourceLine" id="cb11-4" title="4">    }</a>
+<a class="sourceLine" id="cb11-5" title="5">    persistence.<span class="fu">put</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNp</span>().<span class="fu">getBytes</span>());</a>
+<a class="sourceLine" id="cb11-6" title="6">    <span class="kw">if</span> (!Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNa</span>())) {</a>
+<a class="sourceLine" id="cb11-7" title="7">        persistence.<span class="fu">put</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNa</span>().<span class="fu">getBytes</span>());</a>
+<a class="sourceLine" id="cb11-8" title="8">    }</a>
+<a class="sourceLine" id="cb11-9" title="9">    <span class="kw">if</span> (acceptor.<span class="fu">getVa</span>() != <span class="kw">null</span>) {</a>
+<a class="sourceLine" id="cb11-10" title="10">        persistence.<span class="fu">put</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getVa</span>());</a>
+<a class="sourceLine" id="cb11-11" title="11">    }</a>
+<a class="sourceLine" id="cb11-12" title="12">}</a>
+<a class="sourceLine" id="cb11-13" title="13"></a>
+<a class="sourceLine" id="cb11-14" title="14">Optional&lt;LocalAcceptor&gt; <span class="fu">regainAcceptor</span>(<span class="dt">int</span> round) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
+<a class="sourceLine" id="cb11-15" title="15">    <span class="dt">byte</span>[] np = persistence.<span class="fu">get</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>());</a>
+<a class="sourceLine" id="cb11-16" title="16"></a>
+<a class="sourceLine" id="cb11-17" title="17">    <span class="kw">if</span> (np == <span class="kw">null</span>) {</a>
+<a class="sourceLine" id="cb11-18" title="18">        <span class="kw">return</span> Optional.<span class="fu">empty</span>();</a>
+<a class="sourceLine" id="cb11-19" title="19">    }</a>
+<a class="sourceLine" id="cb11-20" title="20">    <span class="dt">byte</span>[] na = persistence.<span class="fu">get</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>());</a>
+<a class="sourceLine" id="cb11-21" title="21">    <span class="dt">byte</span>[] va = persistence.<span class="fu">get</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>());</a>
+<a class="sourceLine" id="cb11-22" title="22"></a>
+<a class="sourceLine" id="cb11-23" title="23">    <span class="bu">String</span> nps = <span class="kw">new</span> <span class="bu">String</span>(np);</a>
+<a class="sourceLine" id="cb11-24" title="24">    <span class="bu">String</span> nas = na == <span class="kw">null</span> ? <span class="kw">null</span> : <span class="kw">new</span> <span class="bu">String</span>(na);</a>
+<a class="sourceLine" id="cb11-25" title="25"></a>
+<a class="sourceLine" id="cb11-26" title="26">    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));</a>
+<a class="sourceLine" id="cb11-27" title="27">}</a></code></pre></div>
 <p>输入一直在增长，需要删除共识服务中已经处理完成的输入，见<a href="https://z42y.github.io/parliament/javadoc//io/github/parliament/ReplicateStateMachine.html#forget()">forget方法</a>。</p>
 <h3 id="活跃性问题">活跃性问题</h3>
 <p>根据<a href="https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/">FLP不可能原理</a>：</p>
@@ -560,19 +554,19 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>任何分布式共识算法，只要有一个进程宕机，剩余的进程存在永远无法达成共识的可能性。</p>
 </blockquote>
 <p>对于Paxos算法，很容易找到无法达成共识的情况，比如不同proposer的accept每次都因其他proposer产生的更高prepare编号而acceptor被拒绝。 解决办法是在可能冲突时，引入随机等待，降低这种可能性，并在重试达到最大次数时，失败退出。如：</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">if</span> (!decided) {</span>
-<span id="cb12-2"><a href="#cb12-2"></a>    retryCount++;</span>
-<span id="cb12-3"><a href="#cb12-3"></a>    <span class="kw">try</span> {</span>
-<span id="cb12-4"><a href="#cb12-4"></a>        <span class="bu">Thread</span>.<span class="fu">sleep</span>(<span class="bu">Math</span>.<span class="fu">abs</span>(random.<span class="fu">nextInt</span>()) % <span class="dv">300</span>);</span>
-<span id="cb12-5"><a href="#cb12-5"></a>    } <span class="kw">catch</span> (<span class="bu">InterruptedException</span> e) {</span>
-<span id="cb12-6"><a href="#cb12-6"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.&quot;</span>, e);</span>
-<span id="cb12-7"><a href="#cb12-7"></a>        <span class="kw">return</span> <span class="kw">null</span>;</span>
-<span id="cb12-8"><a href="#cb12-8"></a>    }</span>
-<span id="cb12-9"><a href="#cb12-9"></a>    <span class="kw">if</span> (retryCount &gt;= <span class="dv">7</span>) {</span>
-<span id="cb12-10"><a href="#cb12-10"></a>        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.Retried {} times.&quot;</span>, <span class="dv">7</span>);</span>
-<span id="cb12-11"><a href="#cb12-11"></a>        <span class="kw">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span>();</span>
-<span id="cb12-12"><a href="#cb12-12"></a>    }</span>
-<span id="cb12-13"><a href="#cb12-13"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb12-1" title="1"><span class="kw">if</span> (!decided) {</a>
+<a class="sourceLine" id="cb12-2" title="2">    retryCount++;</a>
+<a class="sourceLine" id="cb12-3" title="3">    <span class="kw">try</span> {</a>
+<a class="sourceLine" id="cb12-4" title="4">        <span class="bu">Thread</span>.<span class="fu">sleep</span>(<span class="bu">Math</span>.<span class="fu">abs</span>(random.<span class="fu">nextInt</span>()) % <span class="dv">300</span>);</a>
+<a class="sourceLine" id="cb12-5" title="5">    } <span class="kw">catch</span> (<span class="bu">InterruptedException</span> e) {</a>
+<a class="sourceLine" id="cb12-6" title="6">        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.&quot;</span>, e);</a>
+<a class="sourceLine" id="cb12-7" title="7">        <span class="kw">return</span> <span class="kw">null</span>;</a>
+<a class="sourceLine" id="cb12-8" title="8">    }</a>
+<a class="sourceLine" id="cb12-9" title="9">    <span class="kw">if</span> (retryCount &gt;= <span class="dv">7</span>) {</a>
+<a class="sourceLine" id="cb12-10" title="10">        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.Retried {} times.&quot;</span>, <span class="dv">7</span>);</a>
+<a class="sourceLine" id="cb12-11" title="11">        <span class="kw">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span>();</a>
+<a class="sourceLine" id="cb12-12" title="12">    }</a>
+<a class="sourceLine" id="cb12-13" title="13">}</a></code></pre></div>
 <p>如果去掉这个随机等待，在多核机器运行单元测试非常容易出现重试失败。</p>
 <h2 id="总结">总结</h2>
 <p>到这里，系统基本功能就完成了。我们的系统很简单，但是低并发的场景，也够用了。</p>
