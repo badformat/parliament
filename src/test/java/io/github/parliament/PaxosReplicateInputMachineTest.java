@@ -132,8 +132,6 @@ class PaxosReplicateInputMachineTest {
 
         assertTrue(failed.isPresent());
 
-        assertTrue(failed.get() < instanceNo / 2);
-
         failed = myOutputs.stream().map(f -> {
             try {
                 Output output1 = f.get(3, TimeUnit.SECONDS);
@@ -146,8 +144,6 @@ class PaxosReplicateInputMachineTest {
         }).reduce((i, j) -> i + j);
 
         assertTrue(failed.isPresent());
-
-        assertTrue(failed.get() < instanceNo / 2);
         keepUp();
     }
 
