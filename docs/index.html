@@ -83,13 +83,16 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <li><a href="#背景">背景</a></li>
 <li><a href="#目标">目标</a></li>
 <li><a href="#从灾备到容错">从灾备到容错</a><ul>
-<li><a href="#使用主从复制实现数据灾备">使用主从复制实现数据灾备</a></li>
-<li><a href="#主从复制的问题">主从复制的问题</a></li>
+<li><a href="#主从复制">主从复制</a></li>
+<li><a href="#单点故障">单点故障</a></li>
 </ul></li>
 <li><a href="#副本容错">副本容错</a><ul>
-<li><a href="#复制状态机">复制状态机</a></li>
+<li><a href="#网络分区的问题">网络分区的问题</a></li>
 </ul></li>
-<li><a href="#共识与paxos算法">共识与Paxos算法</a></li>
+<li><a href="#复制状态机">复制状态机</a><ul>
+<li><a href="#共识问题">共识问题</a></li>
+</ul></li>
+<li><a href="#理解paxos">理解Paxos</a></li>
 <li><a href="#键值服务的代码实现">键值服务的代码实现</a><ul>
 <li><a href="#java-nio的使用">JAVA NIO的使用</a></li>
 <li><a href="#网络协议的解析构造">网络协议的解析构造</a></li>
@@ -135,7 +138,10 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <h2 id="目标">目标</h2>
 <p>该服务除了实现常见的“put <em>key</em> <em>value</em>”、“get <em>key</em>”、“del <em>key0</em> [<em>key1</em> …]”操作， 还实现了按范围取值的命令“range <em>begin</em> <em>end</em>”，其中begin和end为开始、结束key值，字典序排序。</p>
 <p>服务使用redis的resp协议进行通信，可以直接使用redis-cli等客户端连接测试，或者使用redis客户端库进行操作。</p>
-<p>该服务有容错能力，并且同时保证顺序一致性： &gt;the result of any execution is the same as if the operations of all the processors were executed in some sequential order, and the operations of each individual processor appear in this sequence in the order specified by its program. - - Lamport</p>
+<p>该服务有容错能力，并且同时保证顺序一致性：</p>
+<blockquote>
+<p>the result of any execution is the same as if the operations of all the processors were executed in some sequential order, and the operations of each individual processor appear in this sequence in the order specified by its program. - - Lamport</p>
+</blockquote>
 <ul>
 <li>执行结果是所有进程的操作按某个顺序执行的执行结果。</li>
 <li>每个进程的操作，在上面的顺序中，与该进程程序指定的顺序一致。</li>
@@ -144,22 +150,22 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <pre><code>put(x,1),put(y,2),get(x),get(y)</code></pre>
 <p>客户端2执行：</p>
 <pre><code>put(z,3),put(y,3),get(x),get(z)</code></pre>
-<p>在服务器上可能的一种执行顺序是：</p>
+<p>在服务器上可能的一种结果是：</p>
 <pre><code>put(x,1),put(z,3),put(y,2),put(y,3),get(x),get(y),get(x),get(z)</code></pre>
-<p>以下顺序是不可能的：</p>
+<p>以下结果是顺序一致性不允许的：</p>
 <pre><code>put(x,1),put(y,2),put(y,3),put(z,3),get(x),get(z),get(x),get(y)</code></pre>
 <p>因为put(z,3)发生put(y,3)后面，这不是客户端2程序指定的顺序。</p>
 <p>不同客户端看到不同的总体执行顺序也是不允许的。</p>
 <p>这些系统对客户端作出的保证就是系统的一致性模型，不同系统有不同的<a href="https://zh.wikipedia.org/wiki/%E5%86%85%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E6%A8%A1%E5%9E%8B">一致性模型</a>，这里的保证属于顺序一致性。</p>
 <p>一致性模型有强弱之分，一致性越强，对应用程序或程序员越友好，但是实现难度更大，性能更差；反之，一致性越弱，一般实现更简单，性能更好，但对应用者更加不友好、更不可预测，我们在下面将体会到这点。</p>
 <h2 id="从灾备到容错">从灾备到容错</h2>
-<h3 id="使用主从复制实现数据灾备">使用主从复制实现数据灾备</h3>
+<h3 id="主从复制">主从复制</h3>
 <p>对于键值服务等数据类型应用，主从复制是最常见的灾备手段，一台机器提供服务，另一台机器通过网络对这台机器的数据进行本地备份。 如图：</p>
 <figure>
 <img src="./pb.png" alt="主从复制" /><figcaption>主从复制</figcaption>
 </figure>
 <p>主从复制分为同步方式和异步方式，同步方式是指请求备份成功后返回成功，异步是指先返回结果再进行同步。</p>
-<h3 id="主从复制的问题">主从复制的问题</h3>
+<h3 id="单点故障">单点故障</h3>
 <p>主从机器中任何一台出现故障，都需要暂停服务，恢复后，才能继续提供服务，否则可能出现数据丢失的问题。</p>
 <p>可以提供多台从节点提高可用性，只要有一台从节点可用，服务可以不用暂停。 如图：</p>
 <figure>
@@ -170,6 +176,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <h2 id="副本容错">副本容错</h2>
 <p>为了容错，我们可提供多个服务进程的副本，收到请求的节点使用某种格式的日志记录该请求，并同步给各个节点执行。</p>
 <p>当某个节点宕机或网络不可达时，另一个节点可以继续为客户提供服务，宕机节点恢复后， 它可以从其他节点获取宕机后的日志进行回放，赶上其他节点的状态。</p>
+<h3 id="网络分区的问题">网络分区的问题</h3>
 <p>但是，网络分区会使得不同客户端可能会使用不同节点进行读写请求，如：</p>
 <figure>
 <img src="./pb3.png" alt="网络分区" /><figcaption>网络分区</figcaption>
@@ -194,7 +201,7 @@ if x == 1:
 <p>除此之外，如果某个客户端应用无法连接w个节点和r个节点，则服务对该客户端不可用， 如果要提高可用性，可以在该客户端所在网络分区没有w个节点时，新建副本满足要求， 但这将破坏系统的一致性，亚马逊DynamoDB就是这种实现方式。</p>
 <p>所有分布式系统，都存在着这种一致性和可用性之间的<a href="http://dbmsmusings.blogspot.com/2010/04/problems-with-cap-and-yahoos-little.html">权衡</a>。</p>
 <p>虽然可以通过逻辑时间标记数据版本解决一致性问题，但是对于复杂应用，如分布式数据库的SQL操作， 逻辑时间解决起来是很复杂的。</p>
-<h3 id="复制状态机">复制状态机</h3>
+<h2 id="复制状态机">复制状态机</h2>
 <p>另一种想法是选举一个Leader接收请求，当前不是Leader的节点拒绝客户端请求。 但是，如何保证每个客户端的Leader是一样的呢？如果在请求过程中，Leader发生了变化呢？</p>
 <p>可以看到，要满足顺序一致性，Leader更新过程本身也是操作的一部分，和其他业务请求面对的问题一样。如下所示：</p>
 <pre><code>put(x,1),leader(server 1),put(x,2),leader(server 2)</code></pre>
@@ -203,7 +210,7 @@ if x == 1:
 <figure>
 <img src="./rms.png" alt="复制状态机" /><figcaption>复制状态机</figcaption>
 </figure>
-<h2 id="共识与paxos算法">共识与Paxos算法</h2>
+<h3 id="共识问题">共识问题</h3>
 <p>如果对复制状态给的输入进行递增编号，只要保证每个节点对相关编号的输入内容达成一致，即可实现复制状态机，这种做法称为全序广播或原子广播。 全序广播可以保证顺序一致性。</p>
 <p>这就把问题变成了一个典型的分布式共识问题：</p>
 <blockquote>
@@ -211,6 +218,7 @@ if x == 1:
 </blockquote>
 <p>协商<strong>每个</strong>编号操作内容的过程，就是<strong>一次</strong>分布式共识达成过程，因此全序广播问题又等价为共识问题。</p>
 <p>在可能存在网络分区的异步网络中，常见的共识算法有Paxos和raft，我们使用Paxos共识算法。</p>
+<h2 id="理解paxos">理解Paxos</h2>
 <p>Paxos算法的推导过程就是一个为了得到结果，不断对条件进行约束的过程。</p>
 <p>首先，某个节点作为发起者（proposer），对其他节点发起提案，接收者需要满足<strong>约束P1</strong>：</p>
 <blockquote>
