@@ -1,5 +1,6 @@
 package io.github.parliament.skiplist;
 
+import com.google.common.primitives.UnsignedBytes;
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
 import org.junit.jupiter.api.AfterEach;
@@ -185,7 +186,7 @@ class SkipListTest {
         List<byte[]> values = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             byte[] key = String.valueOf(random.nextInt()).getBytes();
-            if (Arrays.compare(max, key) <= 0) {
+            if (UnsignedBytes.lexicographicalComparator().compare(max, key) <= 0) {
                 max = key;
             }
             byte[] value = ("Lorem ipsum " + random.nextInt()).getBytes();

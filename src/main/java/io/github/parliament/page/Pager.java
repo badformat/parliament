@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
@@ -18,10 +19,10 @@ import java.util.concurrent.ConcurrentSkipListMap;
 /**
  * {@link Page}管理器，负责在{@link Heap}文件中分配、获取、回收一块文件page页面。
  * {@link Page}是在某个{@link Heap}文件中的一块地址，每个Page都有独立的编号。
- *
+ * <p>
  * 一个heap文件由heads和pages两部分组成，head保存了该堆文件所有page的编号和对应的地址信息。
  * head的个数由page大小决定。
- *
+ * <p>
  * heap文件格式如下：
  * <pre>
  * |------------------head---------------------|---------pages-------|
@@ -194,11 +195,14 @@ public class Pager {
         try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(METAINF_FILENAME),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
 
-            ByteBuffer src = ByteBuffer.allocate(4).putInt(heapSize).flip();
+            ByteBuffer src = ByteBuffer.allocate(4);
+            src.putInt(heapSize);
+            src.flip();
             while (src.hasRemaining()) {
                 chn.write(src);
             }
-            src = ByteBuffer.allocate(4).putInt(pageSize).flip();
+            src = ByteBuffer.allocate(4).putInt(pageSize);
+            src.flip();
             while (src.hasRemaining()) {
                 chn.write(src);
             }
@@ -206,7 +210,9 @@ public class Pager {
 
         try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_SEQ_FILENAME),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-            ByteBuffer src = ByteBuffer.allocate(4).putInt(0).flip();
+            ByteBuffer src = ByteBuffer.allocate(4);
+            src.putInt(0);
+            src.flip();
             while (src.hasRemaining()) {
                 chn.write(src);
             }
@@ -261,7 +267,8 @@ public class Pager {
                     while (read != -1 && dst.hasRemaining()) {
                         read = chn.read(dst);
                     }
-                    pn = dst.flip().getInt();
+                    dst.flip();
+                    pn = dst.getInt();
                     chn.truncate(size - 4);
                 }
             }
@@ -277,8 +284,9 @@ public class Pager {
     public void recycle(Page page) throws IOException {
         synchronized (METAINF_FILENAME) {
             long position = Files.size(path.resolve(METAINF_FILENAME));
-            atomicFileWriter.write(path.resolve(METAINF_FILENAME), position,
-                    ByteBuffer.allocate(4).putInt(page.getNo()).flip());
+            ByteBuffer buf = ByteBuffer.allocate(4).putInt(page.getNo());
+            buf.flip();
+            atomicFileWriter.write(path.resolve(METAINF_FILENAME), position, buf);
         }
     }
 
@@ -296,9 +304,12 @@ public class Pager {
                 while (read != -1 && dst.hasRemaining()) {
                     read = chn.read(dst);
                 }
-                i = dst.flip().getInt();
+                dst.flip();
+                i = dst.getInt();
             }
-            atomicFileWriter.write(path.resolve(PAGE_SEQ_FILENAME), 0, ByteBuffer.allocate(4).putInt(i + 1).clear());
+            ByteBuffer buf = ByteBuffer.allocate(4).putInt(i + 1);
+            buf.clear();
+            atomicFileWriter.write(path.resolve(PAGE_SEQ_FILENAME), 0, buf);
             return i;
         }
     }

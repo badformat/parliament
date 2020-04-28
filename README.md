@@ -1,6 +1,6 @@
 # 简介
 
-parliament是一个带持久化的分布式缓存服务器，基于JDK 9+。
+parliament是一个带持久化的分布式缓存服务器，基于JDK 8+。
 
 **业余爱好项目，生产环境使用，请自担风险**。
 
@@ -8,7 +8,7 @@ parliament是一个带持久化的分布式缓存服务器，基于JDK 9+。
 
 # 构建
 - Apache Maven
-- JDK 9+
+- JDK 8+
 
 如果你要使用IDE查看代码，请安装lombok相关[插件](https://projectlombok.org/setup/overview)。
 

@@ -78,7 +78,8 @@ public class AtomicFileWriter {
             }
 
             String fileName = fileToWrite.toAbsolutePath().toString();
-            ByteBuffer fileNameLenBuf = ByteBuffer.allocate(4).putInt(fileName.getBytes().length).clear();
+            ByteBuffer fileNameLenBuf = ByteBuffer.allocate(4).putInt(fileName.getBytes().length);
+            fileNameLenBuf.clear();
             while (fileNameLenBuf.hasRemaining()) {
                 log.write(fileNameLenBuf);
             }
@@ -88,12 +89,14 @@ public class AtomicFileWriter {
                 log.write(fileNameBuf);
             }
 
-            ByteBuffer positionBuf = ByteBuffer.allocate(8).putLong(position).clear();
+            ByteBuffer positionBuf = ByteBuffer.allocate(8).putLong(position);
+            positionBuf.clear();
             while (positionBuf.hasRemaining()) {
                 log.write(positionBuf);
             }
 
-            ByteBuffer contentLenBuf = ByteBuffer.allocate(4).putInt(content.remaining()).clear();
+            ByteBuffer contentLenBuf = ByteBuffer.allocate(4).putInt(content.remaining());
+            contentLenBuf.clear();
             while (contentLenBuf.hasRemaining()) {
                 log.write(contentLenBuf);
             }
@@ -103,7 +106,8 @@ public class AtomicFileWriter {
             }
 
             log.position(0);
-            finish.clear().put((byte) 0xff).clear();
+            finish.clear();
+            finish.put((byte) 0xff).clear();
             while (finish.hasRemaining()) {
                 log.write(finish);
             }
@@ -118,7 +122,8 @@ public class AtomicFileWriter {
             while (finish.hasRemaining()) {
                 chn.read(finish);
             }
-            if (!Objects.equals((byte) 0xff, finish.clear().get())) {
+            finish.clear();
+            if (!Objects.equals((byte) 0xff, finish.get())) {
                 Files.delete(log);
                 return;
             }
@@ -151,9 +156,10 @@ public class AtomicFileWriter {
             while (contentBuf.hasRemaining()) {
                 chn.read(contentBuf);
             }
-            contentBuf.flip();
+            contentLen.flip();
+            byte[] content = new byte[contentLen.getInt()];
 
-            byte[] content = new byte[contentLen.flip().getInt()];
+            contentBuf.flip();
             contentBuf.get(content);
 
             byte[] dst = new byte[fileName.capacity()];

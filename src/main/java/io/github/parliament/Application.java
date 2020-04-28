@@ -21,8 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 public class Application {
     private static final Logger logger = LoggerFactory.getLogger(Application.class);
@@ -42,7 +41,9 @@ public class Application {
         prop = System.getProperty("kv");
         InetSocketAddress kv = getInetSocketAddress(prop);
 
-        @NonNull ExecutorService executorService = Executors.newFixedThreadPool(200);
+        @NonNull ExecutorService executorService = new ThreadPoolExecutor(5, 20,
+                10L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(5));
         @NonNull ConnectionPool connectionPool = ConnectionPool.create(500);
         @NonNull PeerAcceptors acceptors = InetPeerAcceptors.builder().peers(peers).connectionPool(connectionPool).build();
         @NonNull InetLearner leaner = InetLearner.create(connectionPool, peers);
@@ -89,13 +90,14 @@ public class Application {
 
         KeyValueServer server = KeyValueServer.builder().socketAddress(kv).keyValueEngine(keyValueEngine).build();
         server.start();
-        logger.info("本地kv服务启动成功，地址：{0}", kv);
+        logger.info("本地kv服务启动成功，地址：{}", kv);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("服务进程退出.");
+            logger.info("服务进程退出");
             try {
                 server.shutdown();
                 paxosServer.shutdown();
             } catch (IOException e) {
+                logger.info("服务进程退出", e);
             }
         }));
     }
@@ -105,13 +107,13 @@ public class Application {
         List<InetSocketAddress> addresses = new ArrayList<>();
         for (String peer : peers) {
             String[] ipAndPort = peer.split(":");
-            addresses.add(new InetSocketAddress(ipAndPort[0], Integer.valueOf(ipAndPort[1])));
+            addresses.add(new InetSocketAddress(ipAndPort[0], Integer.parseInt(ipAndPort[1])));
         }
         return addresses;
     }
 
     public static InetSocketAddress getInetSocketAddress(String prop) {
         String[] ipAndPort = prop.split(":");
-        return new InetSocketAddress(ipAndPort[0], Integer.valueOf(ipAndPort[1]));
+        return new InetSocketAddress(ipAndPort[0], Integer.parseInt(ipAndPort[1]));
     }
 }

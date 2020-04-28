@@ -154,9 +154,7 @@ public class KeyValueEngine implements StateTransfer {
                 List<byte[]> r = skipList.range(key.getContent(), end.getContent());
 
                 List<RespData> a = new ArrayList<>();
-                r.forEach(bytes -> {
-                    a.add(RespBulkString.with(bytes));
-                });
+                r.forEach(bytes -> a.add(RespBulkString.with(bytes)));
                 resp = RespArray.with(a);
                 break;
             default:

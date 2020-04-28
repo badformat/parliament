@@ -43,7 +43,7 @@ public class ReplicateStateMachine {
     private static final Logger logger = LoggerFactory.getLogger(ReplicateStateMachine.class);
     @Getter(AccessLevel.PACKAGE)
     private final LoadingCache<Integer, CompletableFuture<Output>> transforms = CacheBuilder
-            .newBuilder().weakValues().build(new CacheLoader<>() {
+            .newBuilder().weakValues().build(new CacheLoader<Integer, CompletableFuture<Output>>() {
                 @Override
                 public CompletableFuture<Output> load(Integer key) {
                     return new CompletableFuture<>();

@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.primitives.UnsignedBytes;
 import io.github.parliament.Persistence;
 import io.github.parliament.page.Page;
 import io.github.parliament.page.Pager;
@@ -46,7 +47,7 @@ public class SkipList implements Persistence {
     private final LoadingCache<Integer, SkipListPage> skipListPages = CacheBuilder
             .newBuilder()
             .expireAfterWrite(Duration.ofMinutes(5))
-            .build(new CacheLoader<>() {
+            .build(new CacheLoader<Integer, SkipListPage>() {
                 @Override
                 public SkipListPage load(Integer pn) throws Exception {
                     return new SkipListPage(pager.page(pn));
@@ -63,6 +64,8 @@ public class SkipList implements Persistence {
 
     private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
+    private Comparator<byte[]>  bytesComparator = UnsignedBytes.lexicographicalComparator();
+
     public static void init(Path path, int height, Pager pager) throws IOException {
         Path metaFilePath = path.resolve(META_FILE_NAME);
         if (Files.exists(metaFilePath)) {
@@ -73,7 +76,8 @@ public class SkipList implements Persistence {
 
         try (SeekableByteChannel chn = Files.newByteChannel(metaFilePath,
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
-            ByteBuffer src = ByteBuffer.allocate(4).putInt(height).flip();
+            ByteBuffer src = ByteBuffer.allocate(4).putInt(height);
+            src.flip();
             while (src.hasRemaining()) {
                 chn.write(src);
             }
@@ -89,7 +93,9 @@ public class SkipList implements Persistence {
                 page.replaceBytes(5, 9, ByteBuffer.allocate(4).putInt(0).array());
                 pager.sync(page);
 
-                src.clear().putInt(page.getNo()).flip();
+                src.clear();
+                src.putInt(page.getNo());
+                src.flip();
                 while (src.hasRemaining()) {
                     chn.write(src);
                 }
@@ -116,7 +122,7 @@ public class SkipList implements Persistence {
         @Getter
         private volatile boolean isLeaf;
         @Getter
-        private ConcurrentNavigableMap<byte[], byte[]> map;
+        private ConcurrentNavigableMap<byte[], byte[]> map = new ConcurrentSkipListMap<>(bytesComparator);
         @Getter
         private volatile SkipListPage superPage;
 
@@ -129,7 +135,6 @@ public class SkipList implements Persistence {
             rightPageNo = buf.getInt();
             keys = buf.getInt();
             size = HEAD_SIZE_IN_PAGE;
-            map = new ConcurrentSkipListMap<>(Arrays::compare);
             if (keys > 0) {
                 int cur = keys;
                 while (cur > 0) {
@@ -299,7 +304,8 @@ public class SkipList implements Persistence {
             while (read != -1 && dst.hasRemaining()) {
                 read = chn.read(dst);
             }
-            height = dst.flip().getInt();
+            dst.flip();
+            height = dst.getInt();
             Preconditions.checkState(height > 0);
             Preconditions.checkState(height <= 0x0f);
 
@@ -312,12 +318,14 @@ public class SkipList implements Persistence {
                 while (read != -1 && dst.hasRemaining()) {
                     read = chn.read(dst);
                 }
-                startPages[lv] = dst.flip().getInt();
+                dst.flip();
+                startPages[lv] = dst.getInt();
                 lv++;
             }
         }
     }
 
+    @Override
     public void put(byte[] key, byte[] value) throws IOException, ExecutionException {
         try {
             readWriteLock.writeLock().lock();
@@ -339,7 +347,7 @@ public class SkipList implements Persistence {
         }
     }
 
-
+    @Override
     public byte[] get(byte[] key) throws IOException, ExecutionException {
         try {
             readWriteLock.readLock().lock();
@@ -362,7 +370,7 @@ public class SkipList implements Persistence {
     }
 
     public List<byte[]> range(byte[] min, byte[] max) throws IOException, ExecutionException {
-        if (Arrays.compare(min, max) >= 0) {
+        if (bytesComparator.compare(min, max) >= 0) {
             return Collections.emptyList();
         }
         try {
@@ -373,7 +381,7 @@ public class SkipList implements Persistence {
                 if (current.getMap().isEmpty()) {
                     return r;
                 }
-                if (Arrays.compare(max, current.getMap().firstKey()) < 0) {
+                if (bytesComparator.compare(max, current.getMap().firstKey()) < 0) {
                     return r;
                 }
                 r.addAll(current.getMap().subMap(min, max).values());
@@ -389,6 +397,7 @@ public class SkipList implements Persistence {
         }
     }
 
+    @Override
     public boolean del(byte[] key) throws IOException, ExecutionException {
         try {
             boolean d = false;

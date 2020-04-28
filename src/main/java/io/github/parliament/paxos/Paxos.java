@@ -39,7 +39,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
             .build();
     private final LoadingCache<Integer, CompletableFuture<byte[]>> proposals = CacheBuilder.newBuilder()
             .weakValues()
-            .build(new CacheLoader<>() {
+            .build(new CacheLoader<Integer, CompletableFuture<byte[]>>() {
                 @Override
                 public CompletableFuture<byte[]> load(Integer key) {
                     return new CompletableFuture<>();

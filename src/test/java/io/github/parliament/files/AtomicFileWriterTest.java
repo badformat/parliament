@@ -54,7 +54,8 @@ class AtomicFileWriterTest {
                 chn.read(finish);
             }
             // 初始化为0x00，0xff表示写入完成
-            assertEquals((byte) 0xff, finish.clear().get());
+            finish.clear();
+            assertEquals((byte) 0xff, finish.get());
 
             ByteBuffer fileNameLen = ByteBuffer.allocate(4);
             while (fileNameLen.hasRemaining()) {

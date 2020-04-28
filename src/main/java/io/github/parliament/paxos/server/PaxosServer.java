@@ -53,7 +53,7 @@ public class PaxosServer {
         PaxosRespReadHandler readHandler = new PaxosRespReadHandler();
         RespWriteHandler writeHandler = new RespWriteHandler();
 
-        serverSocketChannel.accept(paxos, new CompletionHandler<>() {
+        serverSocketChannel.accept(paxos, new CompletionHandler<AsynchronousSocketChannel, Paxos>() {
 
             @Override
             public void completed(AsynchronousSocketChannel channel, Paxos paxos) {
