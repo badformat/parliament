@@ -62,8 +62,8 @@ class KeyValueEngineTest {
     }
 
     @Test
-    void putAndGet() throws IOException, ExecutionException {
-        ReplicateStateMachine.Input input = requestState("put", "key", "value");
+    void setAndGet() throws IOException, ExecutionException {
+        ReplicateStateMachine.Input input = requestState("set", "key", "value");
         keyValueEngine.transform(input);
         input = requestState("get", "key");
         ReplicateStateMachine.Output o = keyValueEngine.transform(input);
@@ -78,9 +78,9 @@ class KeyValueEngineTest {
         Stream.iterate(i, (k) -> k + 1).limit(200).parallel()
                 .map((n) -> {
                     try {
-                        ReplicateStateMachine.Input input = requestState("put", "key" + n, "value" + n);
+                        ReplicateStateMachine.Input input = requestState("set", "key" + n, "value" + n);
                         ReplicateStateMachine.Output o = keyValueEngine.transform(input);
-                        assertArrayEquals(RespInteger.with(1).toBytes(), o.getContent());
+                        assertArrayEquals(RespSimpleString.withUTF8("OK").toBytes(), o.getContent());
                         input = requestState("get", "key" + n);
                         o = keyValueEngine.transform(input);
                         RespBulkString s = RespDecoder.create().decode(o.getContent()).get();
