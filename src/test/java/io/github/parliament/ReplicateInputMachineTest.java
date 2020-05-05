@@ -28,7 +28,7 @@ class ReplicateInputMachineTest {
                 .sequence(sequence)
                 .build();
         rsm.setStateTransfer(processor);
-        Output output = mock(Output.class);
+        ReplicateStateMachine.Output output = mock(ReplicateStateMachine.Output.class);
         when(output.getContent()).thenReturn("output".getBytes());
         when(processor.transform(any())).thenReturn(output);
     }
@@ -43,10 +43,10 @@ class ReplicateInputMachineTest {
     void submit() throws IOException,
             ExecutionException,
             InterruptedException {
-        Input submitted = rsm.newState("content".getBytes());
-        CompletableFuture<Output> future = rsm.submit(submitted);
+        ReplicateStateMachine.Input submitted = rsm.newState("content".getBytes());
+        CompletableFuture<ReplicateStateMachine.Output> future = rsm.submit(submitted);
         rsm.apply();
-        Output output = future.get();
+        ReplicateStateMachine.Output output = future.get();
         when(output.getUuid()).thenReturn(submitted.getUuid());
         assertEquals(submitted.getId(), output.getId());
         assertArrayEquals(submitted.getUuid(), output.getUuid());
@@ -55,8 +55,8 @@ class ReplicateInputMachineTest {
 
     @Test
     void follow() throws Exception {
-        CompletableFuture<Output> f1 = rsm.submit(rsm.newState("state1".getBytes()));
-        CompletableFuture<Output> f2 = rsm.submit(rsm.newState("state2".getBytes()));
+        CompletableFuture<ReplicateStateMachine.Output> f1 = rsm.submit(rsm.newState("state1".getBytes()));
+        CompletableFuture<ReplicateStateMachine.Output> f2 = rsm.submit(rsm.newState("state2".getBytes()));
 
         assertThrows(TimeoutException.class, () -> f1.get(1, TimeUnit.SECONDS));
 
@@ -92,14 +92,14 @@ class ReplicateInputMachineTest {
     }
 
     @Test
-    void max() throws ExecutionException, IOException {
+    void max() throws ExecutionException, IOException, InterruptedException {
         rsm.submit(rsm.newState("state1".getBytes()));
         rsm.apply();
         assertEquals(0, rsm.max());
     }
 
     @Test
-    void done() throws IOException, ExecutionException {
+    void done() throws IOException, ExecutionException, InterruptedException {
         rsm.submit(rsm.newState("newState".getBytes()));
         rsm.apply();
 
@@ -113,7 +113,7 @@ class ReplicateInputMachineTest {
     }
 
     @Test
-    void forget() throws IOException, ExecutionException {
+    void forget() throws IOException, ExecutionException, InterruptedException {
         assertThrows(IllegalStateException.class, () -> rsm.forget(0));
         rsm.submit(rsm.newState("newState".getBytes()));
         rsm.apply();

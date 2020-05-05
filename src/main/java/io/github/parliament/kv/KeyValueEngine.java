@@ -12,26 +12,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 /**
- *
- *
  * @author zy
  */
 public class KeyValueEngine implements StateTransfer {
     private static final Logger logger = LoggerFactory.getLogger(KeyValueEngine.class);
-    private static final String PUT_CMD = "put";
-    private static final String GET_CMD = "get";
-    private static final String DEL_CMD = "del";
-    private static final String RANGE_CMD = "range";
+    private static final String SET_CMD = "SET";
+    private static final String GET_CMD = "GET";
+    private static final String DEL_CMD = "DEL";
+    private static final String RANGE_CMD = "RANGE";
 
     private ExecutorService executorService;
     @Getter(AccessLevel.PACKAGE)
@@ -52,45 +48,39 @@ public class KeyValueEngine implements StateTransfer {
         rsm.start(this, executorService);
     }
 
-    public Future<RespData> submit(byte[] bytes) throws IOException, ExecutionException {
+    public ByteBuffer execute(byte[] bytes, int timeout, TimeUnit unit) {
         try {
             RespDecoder decoder = new RespDecoder();
             decoder.decode(bytes);
             RespArray request = decoder.get();
 
-            checkSubmitted(request);
+            checkParams(request);
 
-            Input input = rsm.newState(bytes);
-            CompletableFuture<Output> future = rsm.submit(input);
-            return future.thenApply((output) -> {
-                try {
-                    if (!Arrays.equals(input.getUuid(), output.getUuid())) {
-                        return RespError.withUTF8("共识冲突");
-                    }
-                    return RespDecoder.create().decode(output.getContent()).get();
-                } catch (Exception e) {
-                    logger.error("get submit result failed:", e);
-                    return RespError.withUTF8("get submit result failed:" + e.getClass().getName()
-                            + ",message:" + e.getMessage());
-                }
-            });
-        } catch (UnknownKeyValueCommand e) {
-            return CompletableFuture.completedFuture(RespError.withUTF8("Unknown Command."));
+            ReplicateStateMachine.Input input = rsm.newState(bytes);
+            CompletableFuture<ReplicateStateMachine.Output> future = rsm.submit(input);
+
+            ReplicateStateMachine.Output output = future.get(timeout, unit);
+
+            if (!Arrays.equals(input.getUuid(), output.getUuid())) {
+                return RespError.withUTF8("共识冲突").toByteBuffer();
+            }
+            RespData resp = RespDecoder.create().decode(output.getContent()).get();
+            return resp.toByteBuffer();
+        } catch (Exception e) {
+            return RespError.withUTF8("执行错误,ERROR:" + e.getMessage()).toByteBuffer();
         }
-
-
     }
 
-    private void checkSubmitted(RespArray request) throws UnknownKeyValueCommand, IOException {
+    private void checkParams(RespArray request) throws UnknownKeyValueCommand, IOException {
         if (request.size() == 0) {
             throw new UnknownKeyValueCommand("empty command");
         }
 
         RespBulkString cmd = request.get(0);
-        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
+        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8).toUpperCase();
 
         switch (cmdStr) {
-            case PUT_CMD:
+            case SET_CMD:
                 Preconditions.checkState(request.get(1) instanceof RespBulkString);
                 Preconditions.checkState(request.get(2) instanceof RespBulkString);
                 break;
@@ -100,7 +90,7 @@ public class KeyValueEngine implements StateTransfer {
             case DEL_CMD:
                 List<RespBulkString> keys = request.getDatas();
                 for (RespBulkString key : keys) {
-                    Preconditions.checkState(key instanceof RespBulkString);
+                    Preconditions.checkState(key != null);
                 }
                 break;
             case RANGE_CMD:
@@ -109,10 +99,6 @@ public class KeyValueEngine implements StateTransfer {
             default:
                 throw new UnknownKeyValueCommand("unknown command:" + cmdStr);
         }
-    }
-
-    <T> Future<T> submit1(byte[] bytes) throws Exception {
-        return (Future<T>) submit(bytes);
     }
 
     int del(List<RespBulkString> keys) throws IOException, ExecutionException {
@@ -126,18 +112,18 @@ public class KeyValueEngine implements StateTransfer {
     }
 
     @Override
-    public Output transform(Input input) throws IOException, ExecutionException {
+    public ReplicateStateMachine.Output transform(ReplicateStateMachine.Input input) throws IOException, ExecutionException {
         RespArray request = RespDecoder.create().decode(input.getContent()).get();
         RespBulkString cmd = request.get(0);
-        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8);
+        String cmdStr = new String(cmd.getContent(), StandardCharsets.UTF_8).toUpperCase();
         RespData resp = null;
 
         switch (cmdStr) {
-            case PUT_CMD:
+            case SET_CMD:
                 RespBulkString key = request.get(1);
                 RespBulkString value = request.get(2);
                 skipList.put(key.getContent(), value.getContent());
-                resp = RespInteger.with(1);
+                resp = RespSimpleString.withUTF8("OK");
                 break;
             case GET_CMD:
                 key = request.get(1);
@@ -161,7 +147,7 @@ public class KeyValueEngine implements StateTransfer {
                 resp = RespError.withUTF8("Unknown key value command: " + cmdStr);
         }
 
-        return Output.builder()
+        return ReplicateStateMachine.Output.builder()
                 .content(resp.toBytes())
                 .id(input.getId())
                 .uuid(input.getUuid())

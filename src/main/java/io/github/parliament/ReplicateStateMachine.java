@@ -1,17 +1,14 @@
 package io.github.parliament;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.collect.MapMaker;
+import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,12 +16,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.Setter;
 
 /**
  * 并发接受多个事件请求，为每个请求递增分配唯一共识实例编号及客户端标识。 使用共识服务，对事件并发执行共识过程。
@@ -41,8 +32,10 @@ public class ReplicateStateMachine {
     static final byte[] RSM_DONE = "rsm_done".getBytes();
 
     private static final Logger logger = LoggerFactory.getLogger(ReplicateStateMachine.class);
+    private BlockingQueue<byte[]> events = new LinkedBlockingQueue<>();
+    private ConcurrentMap<Integer, Input> inputs = new MapMaker().weakValues().makeMap();
     @Getter(AccessLevel.PACKAGE)
-    private final LoadingCache<Integer, CompletableFuture<Output>> transforms = CacheBuilder
+    private final LoadingCache<Integer, CompletableFuture<Output>> outputs = CacheBuilder
             .newBuilder().weakValues().build(new CacheLoader<Integer, CompletableFuture<Output>>() {
                 @Override
                 public CompletableFuture<Output> load(Integer key) {
@@ -63,10 +56,11 @@ public class ReplicateStateMachine {
 
     @Builder
     private ReplicateStateMachine(@NonNull Persistence persistence,
-            @NonNull Sequence<Integer> sequence, @NonNull Coordinator coordinator) {
+                                  @NonNull Sequence<Integer> sequence, @NonNull Coordinator coordinator) {
         this.persistence = persistence;
         this.sequence = sequence;
         this.coordinator = coordinator;
+        this.coordinator.register(this);
     }
 
     public void start(StateTransfer<String> transfer, Executor executor)
@@ -86,7 +80,7 @@ public class ReplicateStateMachine {
         sequence.set(this.done.get() + 1);
         stop = false;
         executor.execute(() -> {
-            for (;;) {
+            for (; ; ) {
                 if (stop) {
                     return;
                 }
@@ -123,45 +117,56 @@ public class ReplicateStateMachine {
         Preconditions.checkState(input.getId() <= sequence.current(), "Instance id: "
                 + input.getId() + " > sequence current value: " + sequence.current());
         coordinator.coordinate(input.getId(), Input.serialize(input));
-        return transforms.get(input.getId());
+        return outputs.get(input.getId());
     }
 
-    void apply() throws IOException, ExecutionException {
-        int id = done.get() + 1;
-        Future<byte[]> inputFuture = null;
-        Input input = null;
-        CompletableFuture<Output> transform = null;
-        try {
-            inputFuture = coordinator.instance(id);
-            input = Input.deserialize(inputFuture.get(100, TimeUnit.MILLISECONDS));
-            transform = transforms.get(input.getId());
-        } catch (ExecutionException | InterruptedException | IOException e) {
-            logger.error("Exception in coordinator.instance({})", id, e);
-            return;
-        } catch (TimeoutException e) {
-            catchUp();
-            return;
-        } catch (ClassNotFoundException e) {
-            logger.error("deserialize RSM input（id: {}) failed.Can not continue.Server exit.", id,
-                    e);
-            System.exit(-1);
-        }
+    public void onEvent(byte[] consensus) {
+        events.offer(consensus);
+    }
 
+    void apply() throws IOException, ExecutionException, InterruptedException {
         try {
-            writeRedoLog(done());
-            try {
-                Output output = stateTransfer.transform(input);
-                transform.complete(output);
-            } catch (Exception e) {
-                logger.error("Exception thrown by eventProcess.transform for instance {}",
-                        input.getId(), e);
-                return;
+            int id = done.get() + 1;
+            byte[] event = null;
+            while (!events.isEmpty()) {
+                event = events.poll(10, TimeUnit.MILLISECONDS);
+                if (event == null) {
+                    break;
+                }
+                Input input = Input.deserialize(event);
+                inputs.putIfAbsent(input.getId(), input);
             }
-            done(id);
-            syncMaxAndSequence();
-            forget();
-        } finally {
-            removeRedoLog();
+
+            Input input = null;
+            if (inputs.containsKey(id)) {
+                input = inputs.get(id);
+            } else {
+                Future<byte[]> instance = coordinator.instance(id);
+                input = Input.deserialize(instance.get(3, TimeUnit.SECONDS));
+            }
+
+            try {
+                writeRedoLog(done());
+                try {
+                    Output output = stateTransfer.transform(input);
+                    CompletableFuture<Output> transform = outputs.get(input.getId());
+                    transform.complete(output);
+                } catch (Exception e) {
+                    logger.error("Exception thrown by eventProcess.transform for instance {}",
+                            input.getId(), e);
+                    return;
+                }
+                done(id);
+                syncMaxAndSequence();
+                forget();
+            } finally {
+                removeRedoLog();
+            }
+        } catch (ClassNotFoundException e) {
+            logger.error("反序列化失败，无法继续，退出进程", e);
+            System.exit(-1);
+        } catch (TimeoutException e) {
+            heartbeat();
         }
     }
 
@@ -172,7 +177,7 @@ public class ReplicateStateMachine {
         }
     }
 
-    private void catchUp() throws IOException, ExecutionException {
+    private void heartbeat() throws IOException, ExecutionException {
         int begin = done() + 1;
         Preconditions.checkState(begin >= 0);
         int end = coordinator.max();
@@ -243,5 +248,69 @@ public class ReplicateStateMachine {
             logger.debug("update sequence value to:{}", max() + 1);
             sequence.set(max() + 1);
         }
+    }
+
+    @EqualsAndHashCode
+    @ToString
+    @Builder
+    public static class Input implements Serializable {
+        final static long serialVersionUID = 1L;
+        /**
+         * 状态机事件id，在状态流中的唯一标识
+         */
+        @Getter
+        @NonNull
+        private Integer id;
+        /**
+         * 身份tag，记录来自哪个事件发送方
+         */
+        @Getter
+        @NonNull
+        private byte[] uuid;
+        /**
+         * 该事件的内容
+         */
+        @Getter
+        @NonNull
+        private byte[] content;
+
+        public static byte[] serialize(Input input) throws IOException {
+            ByteArrayOutputStream os = new ByteArrayOutputStream();
+            try (ObjectOutputStream oos = new ObjectOutputStream(os)) {
+                oos.writeObject(input);
+            }
+            return os.toByteArray();
+        }
+
+        public static Input deserialize(byte[] bytes) throws IOException, ClassNotFoundException {
+            ByteArrayInputStream is = new ByteArrayInputStream(bytes);
+            try (ObjectInputStream ois = new ObjectInputStream(is)) {
+                return (Input) ois.readObject();
+            }
+        }
+    }
+
+    @Builder
+    @EqualsAndHashCode
+    @ToString
+    public static class Output {
+        /**
+         * 状态机事件id，在状态流中的唯一标识
+         */
+        @Getter
+        @NonNull
+        private Integer id;
+        /**
+         * 身份tag，记录来自哪个事件发送方
+         */
+        @Getter
+        @NonNull
+        private byte[] uuid;
+        /**
+         * 状态机输出的内容
+         */
+        @Getter
+        @NonNull
+        private byte[] content;
     }
 }

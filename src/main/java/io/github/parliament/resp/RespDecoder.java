@@ -47,7 +47,7 @@ public class RespDecoder {
         DECODE_BULK_STRING_CONTENT,
     }
 
-    private class ArrayAggregator {
+    private static class ArrayAggregator {
         private int            len;
         private List<RespData> children = new ArrayList<>();
 
@@ -120,9 +120,9 @@ public class RespDecoder {
                     if (len != null) {
                         if (type == Type.BULK_STRING) {
                             state = State.DECODE_BULK_STRING_CONTENT;
-                            bulkLength = Integer.valueOf(len);
+                            bulkLength = Integer.parseInt(len);
                         } else if (type == Type.ARRAY) {
-                            int length = Integer.valueOf(len);
+                            int length = Integer.parseInt(len);
                             if (length == 0) {
                                 addMessage(RespArray.empty());
                             } else {

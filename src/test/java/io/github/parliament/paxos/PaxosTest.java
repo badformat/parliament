@@ -3,6 +3,7 @@ package io.github.parliament.paxos;
 import com.google.common.base.Strings;
 import io.github.parliament.MockPersistence;
 import io.github.parliament.Persistence;
+import io.github.parliament.ReplicateStateMachine;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.LocalAcceptor;
 import io.github.parliament.paxos.client.InetLearner;
@@ -60,6 +61,8 @@ class PaxosTest {
                 .learner(leaner)
                 .persistence(persistence)
                 .build();
+        ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
+        paxos.register(rsm);
     }
 
     @Test

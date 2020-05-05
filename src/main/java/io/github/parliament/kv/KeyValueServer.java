@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 使用java nio监听指定端口，使用{@link io.github.parliament.resp.RespReadHandler}完成redis resp协议解析后，
  * 使用{@link KeyValueEngine}处理，再使用{@link RespWriteHandler}返回响应。
+ *
  * @author zy
  */
 public class KeyValueServer {
@@ -47,16 +48,15 @@ public class KeyValueServer {
 
     /**
      * 启动服务
+     *
      * @throws Exception 异常
      */
     public void start() throws Exception {
         engine.start();
         RespReadHandler respReadHandler = new RespReadHandler() {
             @Override
-            protected ByteBuffer process(RespHandlerAttachment attachment, RespArray request) throws Exception {
-                return engine.submit(request.toBytes())
-                        .get(attachment.getTimeOutMills(), TimeUnit.MILLISECONDS)
-                        .toByteBuffer();
+            protected ByteBuffer process(RespHandlerAttachment attachment, RespArray request) {
+                return engine.execute(request.toBytes(), attachment.getTimeOutMills(), TimeUnit.MILLISECONDS);
             }
         };
         RespWriteHandler respWriteHandler = new RespWriteHandler();
@@ -83,6 +83,7 @@ public class KeyValueServer {
 
     /**
      * 关闭服务
+     *
      * @throws IOException 关闭异常
      */
     public void shutdown() throws IOException {

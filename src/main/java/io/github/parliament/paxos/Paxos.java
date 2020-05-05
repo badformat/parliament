@@ -6,8 +6,10 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.MapMaker;
+import com.google.common.eventbus.EventBus;
 import io.github.parliament.Coordinator;
 import io.github.parliament.Persistence;
+import io.github.parliament.ReplicateStateMachine;
 import io.github.parliament.Sequence;
 import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.LocalAcceptor;
@@ -50,6 +52,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
     private Persistence persistence;
     private PeerAcceptors peerAcceptors;
     private InetLearner learner;
+    private ReplicateStateMachine subscriber;
     private volatile int max = -1;
     private volatile int min = -1;
     private volatile int done = -1;
@@ -74,6 +77,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
                 max(round);
             }
             proposals.get(round).complete(agreement);
+            subscriber.onEvent(agreement);
         }
 
         @Override
@@ -111,11 +115,21 @@ public class Paxos implements Coordinator, LocalAcceptors {
     }
 
     @Override
-    public void coordinate(int round, byte[] content) throws ExecutionException, IOException {
+    public void register(ReplicateStateMachine rsm) {
+        this.subscriber = rsm;
+    }
+
+    @Override
+    public Future<byte[]> coordinate(int round, byte[] content) throws ExecutionException, IOException {
+        CompletableFuture<byte[]> proposal = proposals.getIfPresent(round);
+        if (proposal != null && proposal.isDone()) {
+            return proposal;
+        }
+
         byte[] agreement = get(round);
         if (agreement != null) {
             proposals.get(round).complete(agreement);
-            return;
+            return proposals.get(round);
         }
         Acceptor me = create(round);
         List<? extends Acceptor> others = peers(round);
@@ -123,13 +137,16 @@ public class Paxos implements Coordinator, LocalAcceptors {
         peers.add(me);
         Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer(peers, sequence, content));
 
-        executorService.submit(() -> proposer.propose((result) -> {
-            peerAcceptors.release(round);
-        }));
+        return executorService.submit(() -> proposer.propose((result) -> peerAcceptors.release(round)));
     }
 
     @Override
     public Future<byte[]> instance(int round) throws ExecutionException, IOException {
+        CompletableFuture<byte[]> proposal = proposals.getIfPresent(round);
+        if (proposal != null && proposal.isDone()) {
+            return proposal;
+        }
+
         byte[] r = get(round);
         if (r != null) {
             proposals.get(round).complete(r);

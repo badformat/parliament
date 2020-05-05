@@ -31,10 +31,10 @@
 
 ## 目标
 
-该服务除了实现常见的"put _key_ _value_"、"get _key_"、"del _key0_  \[_key1_ ...\]"操作，
-还实现了按范围取值的命令"range _begin_ _end_"，其中begin和end为开始、结束key值，字典序排序。
+该服务除了实现常见的"SET _key_ _value_"、"GET _key_"、"DEL _key0_  \[_key1_ ...\]"操作，
+还实现了按范围取值的命令"RANGE _begin_ _end_"，其中begin和end为开始、结束key值，字典序排序。
 
-服务使用redis的resp协议进行通信，可以直接使用redis-cli等客户端连接测试，或者使用redis客户端库进行操作。
+服务使用redis的resp协议进行通信，可以直接使用redis-cli等客户端连接测试。
 
 该服务有容错能力，并且同时保证顺序一致性：
 

@@ -2,7 +2,6 @@ package io.github.parliament;
 
 import io.github.parliament.page.Pager;
 import io.github.parliament.skiplist.SkipList;
-import lombok.NonNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -12,7 +11,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
@@ -50,7 +48,7 @@ class ReplicateInputMachineWithPersistenceTest {
                 .sequence(sequence)
                 .build();
         ret.setStateTransfer(processor);
-        when(processor.transform(any())).thenReturn(mock(Output.class));
+        when(processor.transform(any())).thenReturn(mock(ReplicateStateMachine.Output.class));
         return ret;
     }
 
@@ -69,9 +67,9 @@ class ReplicateInputMachineWithPersistenceTest {
                 .map((i) -> {
                     try {
                         byte[] c = (i + "content").getBytes();
-                        Input s = rsm.newState(c);
+                        ReplicateStateMachine.Input s = rsm.newState(c);
                         assertTrue(rsm.done() < s.getId(), "done:" + rsm.done() + ",id:" + s.getId());
-                        Output o = rsm.submit(s).get(10, TimeUnit.SECONDS);
+                        ReplicateStateMachine.Output o = rsm.submit(s).get(10, TimeUnit.SECONDS);
                         assertArrayEquals(c, s.getContent());
                         assertTrue(rsm.done() >= o.getId() - 1, "done:" + rsm.done() + ",id:" + s.getId());
                     } catch (IOException | InterruptedException | ExecutionException | TimeoutException e) {

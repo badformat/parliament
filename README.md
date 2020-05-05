@@ -36,12 +36,12 @@ java -Dkv="127.0.0.1:7001" -Dme="127.0.0.1:8001" -Dpeers="127.0.0.1:8000,127.0.0
 redis-cli -h 127.0.0.1 -p 7001
 ```
 
-目前实现了get\put\del\range（按key的范围查询列表）命令：
+目前实现了GET\SET\DEL\RANGE（按key的范围查询列表）命令：
 ```
-put a A
-get a
-del a
-range a z
+SET a A
+GET a
+DEL a
+RANGE a z
 ```
     
     Copyright (C) <2019>  <zhang yang>

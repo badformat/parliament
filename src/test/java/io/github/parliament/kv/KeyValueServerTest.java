@@ -4,9 +4,7 @@ import io.github.parliament.*;
 import io.github.parliament.page.Pager;
 import io.github.parliament.resp.*;
 import io.github.parliament.skiplist.SkipList;
-import lombok.NonNull;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -36,8 +34,8 @@ class KeyValueServerTest {
     private static KeyValueServer server;
     private static SocketChannel client;
     private static RespDecoder respDecoder = RespDecoder.create();
-    private static volatile Output output = mock(Output.class);
-    private static volatile Input input = mock(Input.class);
+    private static volatile ReplicateStateMachine.Output output = mock(ReplicateStateMachine.Output.class);
+    private static volatile ReplicateStateMachine.Input input = mock(ReplicateStateMachine.Input.class);
 
     @BeforeAll
     static void beforeAll() throws Exception {

@@ -15,7 +15,7 @@ import java.util.concurrent.Future;
  * @author zy
  **/
 public interface Coordinator {
-    void coordinate(int id, byte[] content) throws ExecutionException, IOException;
+    Future<byte[]> coordinate(int id, byte[] content) throws ExecutionException, IOException;
 
     Future<byte[]> instance(int id) throws ExecutionException, IOException;
     
@@ -34,4 +34,6 @@ public interface Coordinator {
     byte[] get(int id) throws IOException, ExecutionException;
 
     void learn(int id) throws IOException, ExecutionException;
+
+    void register(ReplicateStateMachine rsm);
 }

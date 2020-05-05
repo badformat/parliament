@@ -1,6 +1,7 @@
 package io.github.parliament.paxos.server;
 
 import io.github.parliament.MockPersistence;
+import io.github.parliament.ReplicateStateMachine;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.ConnectionPool;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 class PaxosServerTest {
     private static List<PaxosServer> servers;
@@ -53,6 +55,8 @@ class PaxosServerTest {
                         .persistence(new MockPersistence())
                         .sequence(new TimestampSequence())
                         .build();
+                ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
+                paxos.register(rsm);
                 paxosList.add(paxos);
                 return PaxosServer.builder()
                         .me(address)

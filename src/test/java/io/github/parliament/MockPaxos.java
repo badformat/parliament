@@ -11,12 +11,13 @@ class MockPaxos implements Coordinator {
     private volatile int max = 0;
 
     @Override
-    public void coordinate(int id, byte[] content) {
+    public Future<byte[]> coordinate(int id, byte[] content) {
         states.put(id, content);
         max = Math.max(id, max);
 
         waiting.putIfAbsent(id, new CompletableFuture<>());
         waiting.get(id).complete(content);
+        return waiting.get(id);
     }
 
     @Override
@@ -65,6 +66,11 @@ class MockPaxos implements Coordinator {
 
     @Override
     public void learn(int round) {
+
+    }
+
+    @Override
+    public void register(ReplicateStateMachine rsm) {
 
     }
 
