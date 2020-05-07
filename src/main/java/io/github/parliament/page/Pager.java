@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.io.IOException;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
@@ -32,7 +31,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 public class Pager {
     public static final int MAX_HEAP_SIZE = 1024 * 1024 * 1024;
     static final String PAGE_SEQ_FILENAME = "page_seq";
-    static final String METAINF_FILENAME = "metainf";
+    static final String FREE_PAGES = "free_pages";
     private static final String HEAP_FILENAME_PREFIX = "heap";
     private static final String LOG_DIR = "log";
     private static final int PAGE_HEAD_SIZE = 8;
@@ -188,11 +187,11 @@ public class Pager {
         int heads = Pager.maxPagesInHeap(heapSize, pageSize);
         Preconditions.checkState(heads > 0, "heap size is too small.");
 
-        if (Files.exists(path.resolve(METAINF_FILENAME))) {
+        if (Files.exists(path.resolve(FREE_PAGES))) {
             return;
         }
         Files.createDirectories(path.resolve(LOG_DIR));
-        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(METAINF_FILENAME),
+        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(FREE_PAGES),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
 
             ByteBuffer src = ByteBuffer.allocate(4);
@@ -227,7 +226,7 @@ public class Pager {
     @Builder
     private Pager(Path path) throws IOException {
         this.path = path;
-        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(METAINF_FILENAME), StandardOpenOption.READ)) {
+        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(FREE_PAGES), StandardOpenOption.READ)) {
             ByteBuffer dst = ByteBuffer.allocate(8);
             int read = 0;
             while (read != -1 && dst.hasRemaining()) {
@@ -253,13 +252,13 @@ public class Pager {
     public Page allocate() throws IOException {
         int pn;
         long size;
-        synchronized (METAINF_FILENAME) {
-            size = Files.size(path.resolve(METAINF_FILENAME));
+        synchronized (FREE_PAGES) {
+            size = Files.size(path.resolve(FREE_PAGES));
         }
 
         if (size > 8) {
-            synchronized (METAINF_FILENAME) {
-                try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(METAINF_FILENAME),
+            synchronized (FREE_PAGES) {
+                try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(FREE_PAGES),
                         StandardOpenOption.WRITE, StandardOpenOption.READ)) {
                     chn.position(size - 4);
                     ByteBuffer dst = ByteBuffer.allocate(4);
@@ -282,11 +281,11 @@ public class Pager {
     }
 
     public void recycle(Page page) throws IOException {
-        synchronized (METAINF_FILENAME) {
-            long position = Files.size(path.resolve(METAINF_FILENAME));
+        synchronized (FREE_PAGES) {
+            long position = Files.size(path.resolve(FREE_PAGES));
             ByteBuffer buf = ByteBuffer.allocate(4).putInt(page.getNo());
             buf.flip();
-            atomicFileWriter.write(path.resolve(METAINF_FILENAME), position, buf);
+            atomicFileWriter.write(path.resolve(FREE_PAGES), position, buf);
         }
     }
 

@@ -86,10 +86,10 @@ class PagerTest {
         Pager pager = Pager.builder().path(path).build();
         Page page = pager.allocate();
         pager.recycle(page);
-        assertEquals(12, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+        assertEquals(12, Files.size(pager.getPath().resolve(Pager.FREE_PAGES)));
 
         pager.allocate();
-        assertEquals(8, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+        assertEquals(8, Files.size(pager.getPath().resolve(Pager.FREE_PAGES)));
     }
 
     @Test
@@ -113,7 +113,7 @@ class PagerTest {
             }
         });
 
-        assertEquals(8008, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+        assertEquals(8008, Files.size(pager.getPath().resolve(Pager.FREE_PAGES)));
 
         pages.forEach(page -> {
             try {
@@ -123,6 +123,6 @@ class PagerTest {
             }
         });
 
-        assertEquals(8, Files.size(pager.getPath().resolve(Pager.METAINF_FILENAME)));
+        assertEquals(8, Files.size(pager.getPath().resolve(Pager.FREE_PAGES)));
     }
 }

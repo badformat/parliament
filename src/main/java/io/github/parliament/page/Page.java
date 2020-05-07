@@ -14,6 +14,7 @@ public class Page {
     @Getter
     private int location;
     @Getter
+    @ToString.Exclude
     private byte[] content;
 
     @Builder

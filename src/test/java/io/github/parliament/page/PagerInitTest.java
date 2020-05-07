@@ -37,7 +37,7 @@ class PagerInitTest {
         ByteBuffer buf = ByteBuffer.wrap(Files.readAllBytes(seq));
         assertEquals(0, buf.getInt());
         
-        Path metainf = path.resolve(Pager.METAINF_FILENAME);
+        Path metainf = path.resolve(Pager.FREE_PAGES);
 
         buf = ByteBuffer.wrap(Files.readAllBytes(metainf));
         assertEquals(4096, buf.getInt());

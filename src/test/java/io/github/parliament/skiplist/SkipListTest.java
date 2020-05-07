@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SkipListTest {
     private static String dir = "./testdir";
     private static Path path = Paths.get(dir);
-    private static int level = 6;
+    private static int level = 2;
 
     private SkipList skipList;
     private Pager pager;
@@ -36,6 +36,7 @@ class SkipListTest {
         SkipList.init(path, level, pager);
         skipList = SkipList.builder().path(path).pager(pager).build();
         skipList.setCheckAfterPut(true);
+        skipList.setAlwaysPromo(true);
     }
 
     @AfterEach
@@ -63,7 +64,7 @@ class SkipListTest {
 
         assertNotNull(skipList.getSkipListPages().get(0));
 
-        Page page = pager.page(skipList.getStartPages()[0]);
+        Page page = pager.page(skipList.getStartPages().get(0));
 
         ByteBuffer buf = ByteBuffer.wrap(page.getContent());
 
@@ -228,22 +229,28 @@ class SkipListTest {
 
     @Test
     void delAll() throws IOException, ExecutionException {
-        int limit = 200;
+        int limit = 15;
         for (int i = 0; i < limit; i++) {
             byte[] key = String.valueOf(i).getBytes();
             byte[] value = String.valueOf(i).getBytes();
             skipList.put(key, value);
         }
+        for (int i = 0; i < limit; i++) {
+            byte[] key = String.valueOf(i).getBytes();
+            assertNotNull(skipList.get(key), "获取" + i + "失败");
+        }
 
         for (int i = 0; i < limit; i++) {
             byte[] key = String.valueOf(i).getBytes();
-            skipList.del(key);
+            assertNotNull(skipList.get(key), "获取" + i + "失败");
+            assertTrue(skipList.del(key), "删除" + i + "失败");
         }
 
         for (int i = 0; i < limit; i++) {
             byte[] key = String.valueOf(i).getBytes();
 
-            assertNull(skipList.get(key));
+            byte[] v = skipList.get(key);
+            assertNull(v, "键" + i + "没有删除");
         }
     }
 }
