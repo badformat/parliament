@@ -10,7 +10,6 @@ import io.github.parliament.paxos.client.InetLearner;
 import io.github.parliament.paxos.client.InetPeerAcceptors;
 import io.github.parliament.paxos.client.PeerAcceptors;
 import io.github.parliament.paxos.server.PaxosServer;
-import io.github.parliament.skiplist.SkipList;
 import lombok.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,14 +51,13 @@ public class Application {
         Pager.init(rsmPath, Pager.MAX_HEAP_SIZE, 4 * 1024);
         @NonNull Pager rsmPager = Pager.builder().path(rsmPath).build();
 
-        SkipList.init(rsmPath, 6, rsmPager);
-        @NonNull SkipList rsmSkipList = SkipList.builder().pager(rsmPager).path(rsmPath).build();
+        @NonNull LevelDB rsmDB = LevelDB.open(rsmPath);
 
         @NonNull Paxos paxos = Paxos.builder()
                 .executorService(executorService)
                 .peerAcceptors(acceptors)
                 .learner(leaner)
-                .persistence(rsmSkipList)
+                .persistence(rsmDB)
                 .sequence(new TimestampSequence())
                 .build();
 
@@ -72,7 +70,7 @@ public class Application {
         logger.info("本地paxos服务启动成功，地址：{}", me);
 
         @NonNull ReplicateStateMachine rsm = ReplicateStateMachine.builder()
-                .persistence(rsmSkipList)
+                .persistence(rsmDB)
                 .sequence(new IntegerSequence())
                 .coordinator(paxos)
                 .build();
@@ -80,10 +78,9 @@ public class Application {
         Path dbPath = Paths.get(dir).resolve("db");
         Pager.init(dbPath, Pager.MAX_HEAP_SIZE, 4 * 1024);
         @NonNull Pager dbpager = Pager.builder().path(dbPath).build();
-        SkipList.init(dbPath, 6, dbpager);
-        @NonNull SkipList dbSkipList = SkipList.builder().pager(dbpager).path(dbPath).build();
+        @NonNull LevelDB db = LevelDB.open(dbPath);
         KeyValueEngine keyValueEngine = KeyValueEngine.builder()
-                .skipList(dbSkipList)
+                .persistence(db)
                 .executorService(executorService)
                 .rsm(rsm)
                 .build();

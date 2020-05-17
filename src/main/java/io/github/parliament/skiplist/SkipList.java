@@ -395,20 +395,36 @@ public class SkipList implements Persistence {
     @Override
     public boolean del(byte[] key) throws IOException, ExecutionException {
         try {
-            boolean d = false;
             readWriteLock.writeLock().lock();
-            SkipListPage current = findLeafSkipListPageForKey(key);
-            if (current.del(key)) {
-                d = true;
+            int level = height - 1;
+            SkipListPage page = null;
+            while (level >= 0) {
+                if (page == null) {
+                    page = skipListPages.get(startPages.get(level));
+                }
+                page = floorPage(page, key);
+                if (page == null) {
+                    level--;
+                    continue;
+                }
+
+                if (level > 0) {
+                    byte[] next = page.map.get(key);
+                    if (next == null) {
+                        level--;
+                        page = null;
+                        continue;
+                    }
+                    page.map.remove(key);
+                    int pn = ByteBuffer.wrap(next).getInt();
+                    page = skipListPages.get(pn);
+                } else {
+                    return page.del(key);
+                }
+                level--;
             }
 
-            for (int lv = height - 1; lv > 0; lv--) {
-                SkipListPage p = findSkipListPageForKey(key, lv);
-                if (p != null) {
-                    p.del(key);
-                }
-            }
-            return d;
+            return false;
         } finally {
             readWriteLock.writeLock().unlock();
         }
@@ -441,12 +457,16 @@ public class SkipList implements Persistence {
                     throw new IllegalStateException();
                 }
                 Map.Entry<byte[], byte[]> e = slice.map.floorEntry(key);
+                if (e == null) {
+                    h--;
+                    start = null;
+                    continue;
+                }
                 int pn = ByteBuffer.wrap(e.getValue()).getInt();
                 start = skipListPages.get(pn);
             } else {
                 start = null;
             }
-
             h--;
         }
 
@@ -454,7 +474,7 @@ public class SkipList implements Persistence {
     }
 
     /**
-     * 从指定page开始查找拥有最后一个小于等于待查找值的key所在的page
+     * 从指定page开始查找拥有小于等于待查找key的最后一个page
      *
      * @param start
      * @param key
@@ -462,7 +482,7 @@ public class SkipList implements Persistence {
      */
     private SkipListPage floorPage(SkipListPage start, byte[] key) throws ExecutionException, IOException {
         SkipListPage current = start;
-        SkipListPage floor = null;
+        SkipListPage floor = start;
         while (current != null) {
             byte[] floorKey = current.map.floorKey(key);
             if (floorKey != null) {
@@ -475,18 +495,15 @@ public class SkipList implements Persistence {
             }
 
             int pn = current.getRightPageNo();
-            SkipListPage pre = current;
             current = skipListPages.get(pn);
-            // 在此回收page
-//            if (current.map.isEmpty() && floor != null && !startPages.containsKey(current.getPage().getNo())) {
-//                pre.setRightPageNo(current.getRightPageNo());
-//                pre.sync();
-//                pager.recycle(current.getPage());
-//                skipListPages.invalidate(current.getPage().getNo());
-//                current = pre;
-//            }
+            if (current.map.isEmpty()) {
+                continue;
+            }
+            if (current.map.floorKey(key) == null) {
+                return floor;
+            }
         }
-        return floor;
+        throw new IllegalStateException();
     }
 
     private Page allocatePage(int level) throws IOException {

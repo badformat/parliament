@@ -245,7 +245,6 @@ public class ReplicateStateMachine {
     private synchronized void syncMaxAndSequence() {
         max(coordinator.max());
         if (max() >= sequence.current()) {
-            logger.debug("update sequence value to:{}", max() + 1);
             sequence.set(max() + 1);
         }
     }

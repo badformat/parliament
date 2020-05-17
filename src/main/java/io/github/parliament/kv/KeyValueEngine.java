@@ -31,17 +31,17 @@ public class KeyValueEngine implements StateTransfer {
 
     private ExecutorService executorService;
     @Getter(AccessLevel.PACKAGE)
-    private SkipList skipList;
+    private Persistence persistence;
     @Getter(AccessLevel.PACKAGE)
     private ReplicateStateMachine rsm;
 
     @Builder
     KeyValueEngine(@NonNull ExecutorService executorService,
                    @NonNull ReplicateStateMachine rsm,
-                   @NonNull SkipList skipList) {
+                   @NonNull Persistence persistence) {
         this.executorService = executorService;
         this.rsm = rsm;
-        this.skipList = skipList;
+        this.persistence = persistence;
     }
 
     public void start() throws IOException, ExecutionException {
@@ -104,7 +104,7 @@ public class KeyValueEngine implements StateTransfer {
     int del(List<RespBulkString> keys) throws IOException, ExecutionException {
         int deleted = 0;
         for (RespBulkString key : keys) {
-            if (skipList.del(key.getContent())) {
+            if (persistence.del(key.getContent())) {
                 deleted++;
             }
         }
@@ -122,12 +122,12 @@ public class KeyValueEngine implements StateTransfer {
             case SET_CMD:
                 RespBulkString key = request.get(1);
                 RespBulkString value = request.get(2);
-                skipList.put(key.getContent(), value.getContent());
+                persistence.put(key.getContent(), value.getContent());
                 resp = RespSimpleString.withUTF8("OK");
                 break;
             case GET_CMD:
                 key = request.get(1);
-                byte[] v = skipList.get(key.getContent());
+                byte[] v = persistence.get(key.getContent());
                 resp = v == null ? RespBulkString.nullBulkString() : RespBulkString.with(v);
                 break;
             case DEL_CMD:
@@ -137,7 +137,7 @@ public class KeyValueEngine implements StateTransfer {
             case RANGE_CMD:
                 key = request.get(1);
                 RespBulkString end = request.get(2);
-                List<byte[]> r = skipList.range(key.getContent(), end.getContent());
+                List<byte[]> r = persistence.range(key.getContent(), end.getContent());
 
                 List<RespData> a = new ArrayList<>();
                 r.forEach(bytes -> a.add(RespBulkString.with(bytes)));

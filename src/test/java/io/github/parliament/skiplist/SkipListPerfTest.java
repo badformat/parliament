@@ -15,8 +15,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.*;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * @author zy
@@ -58,9 +57,9 @@ class SkipListPerfTest {
             return true;
         };
         Future<Boolean> f1 = executor.submit(f);
-        Future<Boolean> f2 = executor.submit(f);
+
         assertTrue(f1.get());
-        assertTrue(f2.get());
+
     }
 
     void perfPutDel0() throws IOException, ExecutionException, InterruptedException {
@@ -72,7 +71,7 @@ class SkipListPerfTest {
             keys.add(key);
         }
         for (String key : keys) {
-            skipList.del(key.getBytes());
+            assertEquals(true, skipList.del(key.getBytes()), "delete failed.key :" + key);
         }
     }
 }

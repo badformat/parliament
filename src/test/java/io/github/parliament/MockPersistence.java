@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 
 public class MockPersistence implements Persistence {
     ConcurrentHashMap<List<Byte>, byte[]> map = new ConcurrentHashMap<>();
@@ -21,6 +22,11 @@ public class MockPersistence implements Persistence {
     @Override
     public boolean del(byte[] key) throws IOException {
         return map.remove(toList(key)) != null;
+    }
+
+    @Override
+    public List<byte[]> range(byte[] min, byte[] max) throws IOException, ExecutionException {
+        return null;
     }
 
     List<Byte> toList(byte[] a) {

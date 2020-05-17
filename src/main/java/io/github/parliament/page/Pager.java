@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 public class Pager {
     public static final int MAX_HEAP_SIZE = 1024 * 1024 * 1024;
     static final String PAGE_SEQ_FILENAME = "page_seq";
-    static final String FREE_PAGES = "free_pages";
+    static final String PAGE_META = "page_meta";
     private static final String HEAP_FILENAME_PREFIX = "heap";
     private static final String LOG_DIR = "log";
     private static final int PAGE_HEAD_SIZE = 8;
@@ -187,11 +187,11 @@ public class Pager {
         int heads = Pager.maxPagesInHeap(heapSize, pageSize);
         Preconditions.checkState(heads > 0, "heap size is too small.");
 
-        if (Files.exists(path.resolve(FREE_PAGES))) {
+        if (Files.exists(path.resolve(PAGE_META))) {
             return;
         }
         Files.createDirectories(path.resolve(LOG_DIR));
-        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(FREE_PAGES),
+        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_META),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
 
             ByteBuffer src = ByteBuffer.allocate(4);
@@ -226,7 +226,7 @@ public class Pager {
     @Builder
     private Pager(Path path) throws IOException {
         this.path = path;
-        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(FREE_PAGES), StandardOpenOption.READ)) {
+        try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_META), StandardOpenOption.READ)) {
             ByteBuffer dst = ByteBuffer.allocate(8);
             int read = 0;
             while (read != -1 && dst.hasRemaining()) {
@@ -252,13 +252,11 @@ public class Pager {
     public Page allocate() throws IOException {
         int pn;
         long size;
-        synchronized (FREE_PAGES) {
-            size = Files.size(path.resolve(FREE_PAGES));
-        }
+        synchronized (PAGE_META) {
+            size = Files.size(path.resolve(PAGE_META));
 
-        if (size > 8) {
-            synchronized (FREE_PAGES) {
-                try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(FREE_PAGES),
+            if (size > 8) {
+                try (SeekableByteChannel chn = Files.newByteChannel(path.resolve(PAGE_META),
                         StandardOpenOption.WRITE, StandardOpenOption.READ)) {
                     chn.position(size - 4);
                     ByteBuffer dst = ByteBuffer.allocate(4);
@@ -270,22 +268,22 @@ public class Pager {
                     pn = dst.getInt();
                     chn.truncate(size - 4);
                 }
+                Heap heap = getOrCreateHeap(pn);
+                return heap.page(pn);
+            } else {
+                pn = getAndIncrement();
+                Heap heap = getOrCreateHeap(pn);
+                return heap.allocate(pn);
             }
-            Heap heap = getOrCreateHeap(pn);
-            return heap.page(pn);
-        } else {
-            pn = getAndIncrement();
-            Heap heap = getOrCreateHeap(pn);
-            return heap.allocate(pn);
         }
     }
 
     public void recycle(Page page) throws IOException {
-        synchronized (FREE_PAGES) {
-            long position = Files.size(path.resolve(FREE_PAGES));
+        synchronized (PAGE_META) {
+            long position = Files.size(path.resolve(PAGE_META));
             ByteBuffer buf = ByteBuffer.allocate(4).putInt(page.getNo());
             buf.flip();
-            atomicFileWriter.write(path.resolve(FREE_PAGES), position, buf);
+            atomicFileWriter.write(path.resolve(PAGE_META), position, buf);
         }
     }
 
@@ -307,7 +305,7 @@ public class Pager {
                 i = dst.getInt();
             }
             ByteBuffer buf = ByteBuffer.allocate(4).putInt(i + 1);
-            buf.clear();
+            buf.flip();
             atomicFileWriter.write(path.resolve(PAGE_SEQ_FILENAME), 0, buf);
             return i;
         }
@@ -315,18 +313,18 @@ public class Pager {
 
     private Heap heap(int pageNo) throws IOException {
         Preconditions.checkArgument(pageNo >= 0);
-        int heap = getHeapNoOfPage(pageNo);
-        Path heapPath = getHeapPath(heap);
+        int heapNo = getHeapNoOfPage(pageNo);
+        Path heapPath = getHeapPath(heapNo);
         if (!Files.exists(heapPath)) {
             return null;
         }
 
-        if (heaps.containsKey(heap)) {
-            return heaps.get(heap);
+        if (heaps.containsKey(heapNo)) {
+            return heaps.get(heapNo);
         }
 
         Heap h = new Heap(heapPath);
-        heaps.put(heap, h);
+        heaps.put(heapNo, h);
         return h;
     }
 

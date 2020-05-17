@@ -49,7 +49,7 @@ class KeyValueEngineTest {
         SkipList skipList = SkipList.builder().path(path).pager(pager).build();
         keyValueEngine = KeyValueEngine.builder()
                 .executorService(executorService)
-                .skipList(skipList)
+                .persistence(skipList)
                 .rsm(rsm)
                 .build();
 

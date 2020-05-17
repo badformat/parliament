@@ -49,7 +49,7 @@ class KeyValueServerTest {
         ReplicateStateMachine rsm = mock(ReplicateStateMachine.class);
         KeyValueEngine engine = KeyValueEngine.builder()
                 .executorService(mock(ExecutorService.class))
-                .skipList(skipList)
+                .persistence(skipList)
                 .rsm(rsm)
                 .build();
 
