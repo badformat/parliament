@@ -174,7 +174,7 @@ public class RespDecoder {
                 type = Type.of(t);
                 return State.DECODE_INLINE;
             case RespBulkString.firstChar:
-            case RespArray.firstChar:
+            case RespArray.FIRST_CHAR:
                 type = Type.of(t);
                 return State.DECODE_LENGTH;
             default:
@@ -230,7 +230,8 @@ public class RespDecoder {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T get() {
-        return messages.size() == 0 ? null : (T) messages.remove(0);
+        return messages.isEmpty() ? null : (T) messages.remove(0);
     }
 }

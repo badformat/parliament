@@ -43,7 +43,7 @@ public class ReplicateStateMachine {
                 }
             });
     @Setter(AccessLevel.PACKAGE)
-    private StateTransfer<String> stateTransfer;
+    private StateTransfer stateTransfer;
     @Getter(AccessLevel.PACKAGE)
     private Persistence persistence;
     private Sequence<Integer> sequence;
@@ -63,7 +63,7 @@ public class ReplicateStateMachine {
         this.coordinator.register(this);
     }
 
-    public void start(StateTransfer<String> transfer, Executor executor)
+    public void start(StateTransfer transfer, Executor executor)
             throws IOException, ExecutionException {
         this.stateTransfer = transfer;
         Integer d = getRedoLog();
@@ -87,12 +87,12 @@ public class ReplicateStateMachine {
                 try {
                     apply();
                 } catch (IOException e) {
-                    logger.warn("IOException in RSM Thread.", e);
+                    logger.warn("复制状态机发生IO异常", e);
                 } catch (Exception e) {
-                    logger.error("Unknown exception in RSM Thread.", e);
+                    logger.error("复制状态机发生未知异常", e);
                 }
                 if (Thread.currentThread().isInterrupted()) {
-                    logger.info("RSM Thread is interrupted.exit.");
+                    logger.info("复制状态机线程已中断，退出");
                     return;
                 }
             }
@@ -114,8 +114,8 @@ public class ReplicateStateMachine {
     }
 
     public CompletableFuture<Output> submit(Input input) throws IOException, ExecutionException {
-        Preconditions.checkState(input.getId() <= sequence.current(), "Instance id: "
-                + input.getId() + " > sequence current value: " + sequence.current());
+        Preconditions.checkState(input.getId() <= sequence.current(), "实例id: "
+                + input.getId() + "大于当前序号" + sequence.current());
         coordinator.coordinate(input.getId(), Input.serialize(input));
         return outputs.get(input.getId());
     }
@@ -152,8 +152,8 @@ public class ReplicateStateMachine {
                     CompletableFuture<Output> transform = outputs.get(input.getId());
                     transform.complete(output);
                 } catch (Exception e) {
-                    logger.error("Exception thrown by eventProcess.transform for instance {}",
-                            input.getId(), e);
+                    logger.error("处理复制状态机输入发生错误，输入序号为{}",input.getId());
+                    logger.error("异常",e);
                     return;
                 }
                 done(id);
@@ -229,7 +229,7 @@ public class ReplicateStateMachine {
             }
             return ByteBuffer.wrap(bytes).getInt();
         } catch (BufferUnderflowException | NullPointerException e) {
-            logger.warn("invalid redo log.", e);
+            logger.warn("REDO日志非法", e);
         }
         return null;
     }

@@ -2,7 +2,6 @@ package io.github.parliament;
 
 import io.github.parliament.kv.KeyValueEngine;
 import io.github.parliament.kv.KeyValueServer;
-import io.github.parliament.page.Pager;
 import io.github.parliament.paxos.Paxos;
 import io.github.parliament.paxos.TimestampSequence;
 import io.github.parliament.paxos.client.ConnectionPool;
@@ -48,8 +47,6 @@ public class Application {
         @NonNull InetLearner leaner = InetLearner.create(connectionPool, peers);
 
         Path rsmPath = Paths.get(dir).resolve("rsm");
-        Pager.init(rsmPath, Pager.MAX_HEAP_SIZE, 4 * 1024);
-        @NonNull Pager rsmPager = Pager.builder().path(rsmPath).build();
 
         @NonNull LevelDB rsmDB = LevelDB.open(rsmPath);
 
@@ -76,8 +73,6 @@ public class Application {
                 .build();
 
         Path dbPath = Paths.get(dir).resolve("db");
-        Pager.init(dbPath, Pager.MAX_HEAP_SIZE, 4 * 1024);
-        @NonNull Pager dbpager = Pager.builder().path(dbPath).build();
         @NonNull LevelDB db = LevelDB.open(dbPath);
         KeyValueEngine keyValueEngine = KeyValueEngine.builder()
                 .persistence(db)

@@ -76,7 +76,7 @@ public class KeyValueServer {
 
             @Override
             public void failed(Throwable exc, Object attachment) {
-                logger.error("kv server error.", exc);
+                logger.error("键值服务异常", exc);
             }
         });
     }

@@ -85,6 +85,7 @@ class InetPeerAcceptorsTest {
     @Test
     void createSameRound() {
         List<? extends Acceptor> a = acceptors.create(1);
+        assertNotNull(a);
         assertThrows(IllegalStateException.class, () -> acceptors.create(1));
 
     }
@@ -92,6 +93,7 @@ class InetPeerAcceptorsTest {
     @Test
     void release() {
         List<? extends Acceptor> a = acceptors.create(1);
+        assertNotNull(a);
         acceptors.release(1);
     }
 }

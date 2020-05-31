@@ -33,9 +33,9 @@ public abstract class RespReadHandler implements CompletionHandler<Integer, Resp
                 response = process(attachment, request);
             }
         } catch (Exception e) {
-            logger.error("read handler exception in completed().", e);
+            logger.error("RESP read handler异常", e);
             response = RespArray.with(
-                    RespError.withUTF8("read handler exception:" + e.getClass().getName())).toByteBuffer();
+                    RespError.withUTF8("RESP处理异常:" + e.getClass().getName())).toByteBuffer();
         } finally {
             if (response != null) {
                 RespHandlerAttachment writeAttachment = new RespHandlerAttachment(attachment, response);
@@ -46,7 +46,7 @@ public abstract class RespReadHandler implements CompletionHandler<Integer, Resp
 
     @Override
     public void failed(Throwable exc, RespHandlerAttachment attachment) {
-        logger.error("read handler failed.", exc);
+        logger.error("read handler发生错误", exc);
     }
 
     protected abstract ByteBuffer process(RespHandlerAttachment attachment, RespArray request) throws Exception;

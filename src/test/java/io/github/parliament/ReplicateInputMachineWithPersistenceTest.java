@@ -1,7 +1,5 @@
 package io.github.parliament;
 
-import io.github.parliament.page.Pager;
-import io.github.parliament.skiplist.SkipList;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -34,16 +32,12 @@ class ReplicateInputMachineWithPersistenceTest {
     }
 
     static private ReplicateStateMachine create(String dir) throws Exception {
-        Pager.init(tempDir, 64 * 1024, 4 * 1024);
-        Pager pager = Pager.builder().path(tempDir).build();
-
-        SkipList.init(tempDir, 6, pager);
-        SkipList skipList = SkipList.builder().path(tempDir).pager(pager).build();
+        LevelDB db = LevelDB.open(tempDir.resolve(dir));
         Sequence<Integer> sequence = new IntegerSequence();
         MockPaxos coordinator = new MockPaxos();
         ReplicateStateMachine ret = ReplicateStateMachine
                 .builder()
-                .persistence(skipList)
+                .persistence(db)
                 .coordinator(coordinator)
                 .sequence(sequence)
                 .build();

@@ -33,7 +33,7 @@ public class RespParser {
 
         byte firstByte = bb.get(bb.position());
         switch (firstByte) {
-            case RespArray.firstChar:
+            case RespArray.FIRST_CHAR:
                 return getAsArray();
             case RespSimpleString.firstChar:
                 return getAsSimpleString();
@@ -91,7 +91,7 @@ public class RespParser {
     public RespArray getAsArray() throws IOException {
         readBytesIfNotHasRemaining();
         byte firstByte = bb.get();
-        Preconditions.checkState(firstByte == RespArray.firstChar);
+        Preconditions.checkState(firstByte == RespArray.FIRST_CHAR);
 
         int len = readLength();
 

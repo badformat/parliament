@@ -3,13 +3,10 @@ package io.github.parliament.kv;
 import com.google.common.base.Preconditions;
 import io.github.parliament.*;
 import io.github.parliament.resp.*;
-import io.github.parliament.skiplist.SkipList;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -23,7 +20,6 @@ import java.util.concurrent.*;
  * @author zy
  */
 public class KeyValueEngine implements StateTransfer {
-    private static final Logger logger = LoggerFactory.getLogger(KeyValueEngine.class);
     private static final String SET_CMD = "SET";
     private static final String GET_CMD = "GET";
     private static final String DEL_CMD = "DEL";
@@ -62,18 +58,18 @@ public class KeyValueEngine implements StateTransfer {
             ReplicateStateMachine.Output output = future.get(timeout, unit);
 
             if (!Arrays.equals(input.getUuid(), output.getUuid())) {
-                return RespError.withUTF8("共识冲突").toByteBuffer();
+                return RespError.withUTF8("发生共识冲突").toByteBuffer();
             }
             RespData resp = RespDecoder.create().decode(output.getContent()).get();
             return resp.toByteBuffer();
         } catch (Exception e) {
-            return RespError.withUTF8("执行错误,ERROR:" + e.getMessage()).toByteBuffer();
+            return RespError.withUTF8("执行错误:" + e.getMessage()).toByteBuffer();
         }
     }
 
     private void checkParams(RespArray request) throws UnknownKeyValueCommand, IOException {
         if (request.size() == 0) {
-            throw new UnknownKeyValueCommand("empty command");
+            throw new UnknownKeyValueCommand("命令为空");
         }
 
         RespBulkString cmd = request.get(0);
@@ -97,7 +93,7 @@ public class KeyValueEngine implements StateTransfer {
                 Preconditions.checkState(3 == request.getDatas().size());
                 break;
             default:
-                throw new UnknownKeyValueCommand("unknown command:" + cmdStr);
+                throw new UnknownKeyValueCommand("未知命令:" + cmdStr);
         }
     }
 
@@ -144,7 +140,7 @@ public class KeyValueEngine implements StateTransfer {
                 resp = RespArray.with(a);
                 break;
             default:
-                resp = RespError.withUTF8("Unknown key value command: " + cmdStr);
+                resp = RespError.withUTF8("未知命令:" + cmdStr);
         }
 
         return ReplicateStateMachine.Output.builder()

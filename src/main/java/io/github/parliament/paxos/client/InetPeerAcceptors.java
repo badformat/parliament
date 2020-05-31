@@ -2,7 +2,6 @@ package io.github.parliament.paxos.client;
 
 import com.google.common.base.Preconditions;
 import io.github.parliament.paxos.acceptor.Accept;
-import io.github.parliament.paxos.acceptor.Acceptor;
 import io.github.parliament.paxos.acceptor.Prepare;
 import lombok.Builder;
 import lombok.NonNull;
@@ -17,7 +16,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InetPeerAcceptors implements PeerAcceptors {
-    private static final Logger logger = LoggerFactory.getLogger(InetSocketAddress.class);
+    private static final Logger logger = LoggerFactory.getLogger(InetPeerAcceptors.class);
     private final ConcurrentHashMap<Integer, List<SyncProxyAcceptor>> acceptors = new ConcurrentHashMap<>();
     private final ConnectionPool connectionPool;
     private final List<InetSocketAddress> peers;
@@ -29,13 +28,13 @@ public class InetPeerAcceptors implements PeerAcceptors {
     }
 
     @Override
-    public List<? extends Acceptor> create(int round) {
+    public List<SyncProxyAcceptor> create(int round) {
         Preconditions.checkState(!acceptors.containsKey(round));
         return create0(round);
     }
 
     List<SyncProxyAcceptor> create0(int round) {
-        return acceptors.computeIfAbsent(round, (r) -> {
+        return acceptors.computeIfAbsent(round, r -> {
             List<SyncProxyAcceptor> a = new ArrayList<>();
             for (InetSocketAddress address : peers) {
                 SocketChannel channel = null;
@@ -48,7 +47,7 @@ public class InetPeerAcceptors implements PeerAcceptors {
                             .build();
                     a.add(proxy);
                 } catch (IOException | NoConnectionInPool e) {
-                    logger.error("create paxos acceptor proxy failed.round {}.address {}.",
+                    logger.error("创建Paxos acceptor失败，round {}，地址 {}.",
                             round, address, e);
                     a.add(new SyncProxyAcceptor(round, address, null) {
                         @Override
@@ -63,7 +62,7 @@ public class InetPeerAcceptors implements PeerAcceptors {
 
                         @Override
                         public void decide(byte[] agreement) {
-
+                            // 默认拒绝提案
                         }
                     });
                 }

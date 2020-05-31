@@ -26,6 +26,6 @@ public class RespWriteHandler implements CompletionHandler<Integer, RespHandlerA
 
     @Override
     public void failed(Throwable exc, RespHandlerAttachment attachment) {
-        logger.error("write handler failed.", exc);
+        logger.error("write handler发生错误", exc);
     }
 }

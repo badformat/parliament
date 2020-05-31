@@ -50,14 +50,16 @@ public class Proposer {
                 if (!decided) {
                     retryCount++;
                     try {
-                        Thread.sleep(Math.abs(random.nextInt()) % 300);
+                        int s = random.nextInt();
+                        Thread.sleep((s == Integer.MIN_VALUE ? 10: Math.abs(s)) % 300);
                     } catch (InterruptedException e) {
-                        logger.error("Failed in propose.", e);
-                        return null;
+                        logger.error("Paxos提案失败", e);
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("线程中断");
                     }
                     if (retryCount >= 7) {
-                        logger.error("Failed in propose.Retried {} times.", 7);
-                        throw new IllegalStateException();
+                        logger.error("Paxos提案失败，已重试{}次，放弃提案", 7);
+                        throw new IllegalStateException("Paxos提案重试大于最大次数");
                     }
                 }
             }
@@ -69,7 +71,7 @@ public class Proposer {
                     acceptor.decide(agreement);
                     return 1;
                 } catch (Exception e) {
-                    logger.error("failed in decide().", e);
+                    logger.error("decide()失败", e);
                     return 0;
                 }
             }).reduce((i, j) -> j + j);
@@ -77,9 +79,9 @@ public class Proposer {
             if (success.orElse(0) >= getQuorum()) {
                 return agreement;
             } else {
-                logger.error("failed in propose. decided < quorum.");
+                logger.error("Paxos提案失败，未获得多数票");
                 decided = false;
-                throw new IllegalStateException("decided < quorum.");
+                throw new IllegalStateException("Paxos提案失败，未获得多数票");
             }
         } finally {
             callback.accept(decided);
@@ -100,14 +102,14 @@ public class Proposer {
                 prepares.add(prepare);
                 return 1;
             } catch (Exception e) {
-                logger.warn("failed in propose.", e);
+                logger.warn("Paxos提案失败", e);
                 return 0;
             }
-        }).reduce((p, n) -> p + n);
+        }).reduce((s, p) -> s + p);
 
         if (success.orElse(0) < getQuorum()) {
-            logger.error("success prepare() < quorum. ");
-            throw new IllegalStateException("success prepare() < quorum");
+            logger.error("prepare未获得多数票");
+            throw new IllegalStateException("prepare未获得多数票");
         }
 
         int ok = 0;
@@ -136,7 +138,7 @@ public class Proposer {
     private void checkPrepare(Acceptor acceptor, Prepare prepare) {
         if (prepare.isOk()) {
             Preconditions.checkState(Objects.equals(prepare.getN(), n),
-                    acceptor + " prepare请求返回序号为" + prepare.getN() + "，应该是" + n);
+                     "%s prepare请求返回序号为%s，期望是%s",acceptor, prepare.getN(), n);
         }
     }
 
@@ -149,10 +151,10 @@ public class Proposer {
                 checkAccept(acceptor, accept);
                 return accept.isOk() ? 1 : 0;
             } catch (Exception e) {
-                logger.info("failed in accept", e);
+                logger.info("accept失败", e);
                 return 0;
             }
-        }).reduce((n, p) -> n + p);
+        }).reduce((s, p) -> s + p);
 
         return success.orElse(0) >= getQuorum();
     }
@@ -160,7 +162,7 @@ public class Proposer {
     private void checkAccept(Acceptor acceptor, Accept accept) {
         if (accept.isOk()) {
             Preconditions.checkState(Objects.deepEquals(accept.getN(), this.n),
-                    acceptor + "返回的提案编号为" + accept.getN() + "，应该是" + this.n);
+                    "返回的提案编号为%s，期望是%s", acceptor, accept.getN(), this.n);
         }
     }
 

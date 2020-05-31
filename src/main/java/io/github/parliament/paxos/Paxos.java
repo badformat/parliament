@@ -32,6 +32,7 @@ import java.util.concurrent.*;
 
 public class Paxos implements Coordinator, LocalAcceptors {
     private static final Logger logger = LoggerFactory.getLogger(Paxos.class);
+    private static final String POSTFIX = "agreement";
     private final ConcurrentMap<Integer, Proposer> proposers = new MapMaker()
             .weakValues()
             .makeMap();
@@ -46,7 +47,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
                     return new CompletableFuture<>();
                 }
             });
-    private volatile ExecutorService executorService;
+    private ExecutorService executorService;
     private Sequence<String> sequence;
     private Persistence persistence;
     private PeerAcceptors peerAcceptors;
@@ -70,7 +71,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
         @Override
         public void decide(byte[] agreement) throws Exception {
-            persistence.put((round + "agreement").getBytes(), agreement);
+            persistence.put((round + POSTFIX).getBytes(), agreement);
             persistence();
             if (round > max) {
                 max(round);
@@ -134,9 +135,9 @@ public class Paxos implements Coordinator, LocalAcceptors {
         List<? extends Acceptor> others = peers(round);
         List<Acceptor> peers = new ArrayList<>(others);
         peers.add(me);
-        Proposer proposer = proposers.computeIfAbsent(round, (r) -> new Proposer(peers, sequence, content));
+        Proposer proposer = proposers.computeIfAbsent(round, r -> new Proposer(peers, sequence, content));
 
-        return executorService.submit(() -> proposer.propose((result) -> peerAcceptors.release(round)));
+        return executorService.submit(() -> proposer.propose(result -> peerAcceptors.release(round)));
     }
 
     @Override
@@ -169,7 +170,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
         if (content == null) {
             return;
         }
-        persistence.put((round + "agreement").getBytes(), content);
+        persistence.put((round + POSTFIX).getBytes(), content);
     }
 
     @Override
@@ -203,7 +204,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
             int other = learner.done();
             int cursor = Math.min(before, other);
             if (cursor < min) {
-                logger.warn("forgot others not finished states.It's impossible.A Bug?");
+                logger.warn("Paxos实例清理发生不可能存在的情况：待清理的实例序号大于未完成的实例序号");
                 return;
             }
             int min1 = cursor;
@@ -213,7 +214,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
             int m = Math.max(0, min());
             do {
                 deleteAcceptor(cursor);
-                persistence.del((cursor + "agreement").getBytes());
+                persistence.del((cursor + POSTFIX).getBytes());
                 cursor--;
             } while (cursor >= 0 && cursor > m);
             min(min1);
@@ -222,7 +223,7 @@ public class Paxos implements Coordinator, LocalAcceptors {
 
     @Override
     public byte[] get(int round) throws IOException, ExecutionException {
-        return persistence.get((round + "agreement").getBytes());
+        return persistence.get((round + POSTFIX).getBytes());
     }
 
     private List<? extends Acceptor> peers(int round) {

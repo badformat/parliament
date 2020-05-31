@@ -31,7 +31,7 @@ public class ConnectionPool {
             try {
                 channel.close();
             } catch (IOException e) {
-                logger.warn("close channel failed", e);
+                logger.warn("关闭channel失败", e);
             }
         });
 
@@ -39,7 +39,7 @@ public class ConnectionPool {
             try {
                 channel.close();
             } catch (IOException e) {
-                logger.warn("close channel failed", e);
+                logger.warn("关闭channel失败", e);
             }
         });
     }
@@ -82,7 +82,7 @@ public class ConnectionPool {
             try {
                 channel.close();
             } catch (IOException e) {
-                logger.error("close channel failed.", e);
+                logger.error("关闭channel失败", e);
             }
         } else {
             idles.get(address).add(channel);

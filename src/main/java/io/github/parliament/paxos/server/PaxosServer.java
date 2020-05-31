@@ -66,7 +66,7 @@ public class PaxosServer {
 
             @Override
             public void failed(Throwable exc, Paxos paxos) {
-                logger.error("paxos server socket channel failed.", exc);
+                logger.error("Paxos server channel发生错误.", exc);
             }
         });
 
@@ -113,7 +113,7 @@ public class PaxosServer {
                     byte[] p = paxos.get(rn);
                     return codec.encodeProposal(rn, Optional.ofNullable(p));
                 default:
-                    return codec.encodeError("unknown command :" + req.getCmd());
+                    return codec.encodeError("未知的Paxos服务命令：" + req.getCmd());
             }
         }
     }

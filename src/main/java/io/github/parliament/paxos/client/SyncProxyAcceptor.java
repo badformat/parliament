@@ -82,7 +82,7 @@ class SyncProxyAcceptor implements Acceptor {
         }
     }
 
-    void delegateDecide(int round, byte[] agreement) throws Exception {
+    void delegateDecide(int round, byte[] agreement) throws IOException  {
         synchronized (channel) {
             Preconditions.checkNotNull(agreement, "decide agreement is null");
             ByteBuffer src = codec.encodeDecide(round, agreement);

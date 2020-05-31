@@ -13,7 +13,7 @@ import java.util.List;
 @EqualsAndHashCode
 @ToString
 public class RespArray implements RespData {
-    final static char           firstChar = '*';
+    static final  char           FIRST_CHAR = '*';
     @val
     private      List<RespData> datas;
 
@@ -37,10 +37,12 @@ public class RespArray implements RespData {
         return datas.size();
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T get(int i) {
         return (T) datas.get(i);
     }
 
+    @SuppressWarnings("unchecked")
     public <T> List<T> getDatas() {
         return (List<T>) datas;
     }
@@ -48,7 +50,7 @@ public class RespArray implements RespData {
     @Override
     public byte[] toBytes() {
         StringBuilder sb = new StringBuilder();
-        sb.append(firstChar);
+        sb.append(FIRST_CHAR);
         sb.append(datas.size());
         sb.append("\r\n");
 
