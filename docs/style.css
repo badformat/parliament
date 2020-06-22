@@ -1,16 +1,9 @@
 body {
   margin: 0 auto;
-  max-width: 50em;
-  font-family: "Helvetica", "Arial", sans-serif;
-}
-
-h2 {
-  margin-top: 1em;
-  padding-top: 1em;
-}
-
-body {
+  max-width: 52em;
   color: #222;
+  font-size: 13px;
+  font-family: "Helvetica", "Arial", sans-serif;
 }
 
 h1,
@@ -27,10 +20,6 @@ pre {
 code {
   padding: 2px 4px;
   vertical-align: text-bottom;
-}
-
-pre {
-  padding: 1em;
 }
 
 a {

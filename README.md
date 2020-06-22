@@ -40,7 +40,7 @@ redis-cli -h 127.0.0.1 -p 7001
 
 目前实现了GET\PUT\DEL\RANGE（按key的范围查询列表）命令：
 ```
-PUT a A
+SET a A
 GET a
 DEL a
 RANGE a z
