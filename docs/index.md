@@ -322,7 +322,6 @@ public Input newState(byte[] content) throws DuplicateKeyException {
     return Input.builder().id(next()).uuid(uuid()).content(content).build();
 }
 ```
-
 ReplicateStateMachine可以并发进行多个Paxos共识实例，每个实例递增分配一个编号，所有RSM实例都按照编号顺序，使用后台线程顺序执行所有编号的共识结果。
 
 顺序执行意味着KeyValueEngine无法并发处理已完成共识的各个请求，如果需要提高并发性，需要保证不同机器并发执行的结果一样，这是比较困难的，
@@ -478,7 +477,7 @@ public synchronized Prepare prepare(String n) throws Exception {
     return Prepare.reject(n);
 }
 ```
-[Paxos类](https://z42y.github.io/parliament/javadoc/io/github/parliament/paxos/Paxos.html)保存和恢复acceptor的方法分别如下：
+[Paxos类](https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java)保存和恢复acceptor的方法分别如下：
 ```{.java}
 void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
     if (Strings.isNullOrEmpty(acceptor.getNp())) {

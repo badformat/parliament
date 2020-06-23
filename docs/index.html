@@ -75,12 +75,9 @@ code span.vs { color: #4070a0; } /* VerbatimString */
 code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
   </style>
   <link rel="stylesheet" href="style.css" />
-  <!--[if lt IE 9]>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
-  <![endif]-->
 </head>
 <body>
-<header id="title-block-header">
+<header>
 <h1 class="title">分布式容错设计：以实现一个分布式leveldb服务为例</h1>
 </header>
 <nav id="TOC">
@@ -418,7 +415,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <a class="sourceLine" id="cb17-7" title="7">    }</a>
 <a class="sourceLine" id="cb17-8" title="8">    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);</a>
 <a class="sourceLine" id="cb17-9" title="9">}</a></code></pre></div>
-<p><a href="https://z42y.github.io/parliament/javadoc/io/github/parliament/paxos/Paxos.html">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
+<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
 <div class="sourceCode" id="cb18"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb18-1" title="1"><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
 <a class="sourceLine" id="cb18-2" title="2">    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {</a>
 <a class="sourceLine" id="cb18-3" title="3">        <span class="kw">return</span>;</a>

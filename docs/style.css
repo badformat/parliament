@@ -1,27 +1,26 @@
 body {
-  margin: 0 auto;
-  max-width: 52em;
-  color: #222;
-  font-size: 13px;
-  font-family: "Helvetica", "Arial", sans-serif;
+    margin: 0 auto;
+    max-width: 70%;
+    color: #222;
+    font-size: 15px;
+    font-family: "Helvetica", "Arial", sans-serif;
 }
 
 h1,
 h2,
 strong {
-  color: #000;
+    color: #000;
 }
 
-code,
 pre {
-  background: #eee;
-}
-
-code {
-  padding: 2px 4px;
-  vertical-align: text-bottom;
+    padding: 0.5em;
+    background: #eee;
 }
 
 a {
     color: #00f
+}
+
+.sourceCode {
+    overflow-y: hidden;
 }
