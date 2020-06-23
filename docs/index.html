@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>分布式容错设计：以实现一个分布式leveldb服务为例</title>
+  <title>可容错的分布式系统设计</title>
   <style type="text/css">
       code{white-space: pre-wrap;}
       span.smallcaps{font-variant: small-caps;}
@@ -78,7 +78,8 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </head>
 <body>
 <header>
-<h1 class="title">分布式容错设计：以实现一个分布式leveldb服务为例</h1>
+<h1 class="title">可容错的分布式系统设计</h1>
+<p class="subtitle">以实现一个分布式leveldb服务为例</p>
 </header>
 <nav id="TOC">
 <ul>
@@ -112,14 +113,14 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <blockquote>
 <p>“What I cannot create, I do not understand.” – Richard Feynman</p>
 </blockquote>
-<p>计算机分布式系统是一个包含了各种工程实践及理论的庞杂话题。</p>
-<p>对分布式系统的需求主要有两个场景：</p>
+<p>所谓分布式系统，就是一群计算机通过网络协调完成某一串连贯的任务，是一个包含了各种工程实践及理论的庞杂话题。</p>
+<p>需要分布式系统的场景主要有两个：</p>
 <ol type="1">
-<li>处理单机系统无法胜任的数据量或计算量，如海量存储、天气模拟及预测。</li>
+<li>处理单机系统无法胜任的数据量或计算量，如海量存储、气候模拟等。</li>
 <li>使用多台机器进行容错，避免由于系统宕机、硬件故障、网络错误、机房火灾等意外情况导致的单点故障。</li>
 </ol>
-<p>某些系统同时存在以上两种需求，而分布式容错实现包含了分布式系统设计的很多难点和精髓，只是资料阅读很难让人体会到其中的乐趣和困难。</p>
-<p>正所谓“绝知此事要躬行”，所以笔者在业余时间，将一个单机的<a href="https://github.com/dain/leveldb">leveldb</a>实现扩展为分布式容错实现， 通过这个过程来检验、加深自己对分布式系统实现的理解。同时整理出本篇文档，给同样对相关主题感兴趣的读者提供思路。</p>
+<p>某些系统同时存在以上两种需求，而使用分布式进行容错包含了分布式系统设计的很多难点和精髓，只是资料阅读很难让人体会到其中的乐趣和困难。</p>
+<p>所以笔者在业余时间，通过将一个单机的<a href="https://github.com/dain/leveldb">leveldb</a>实现扩展为分布式容错实现， 检验、加深了自己对分布式系统实现的理解，整理出本篇文档，给同样对相关主题感兴趣的读者提供思路。</p>
 <p>项目源码及构建、运行方式请参看：<a href="https://github.com/z42y/parliament/">项目主页</a>。</p>
 <p>代码里的leveldb功能采用了现有的一个java版本的<a href="https://github.com/dain/leveldb">单机实现</a>， 在本项目中，在其基础上实现了基于redis协议的网络接口及分布式容错设计。</p>
 <h2 id="容错的定义">容错的定义</h2>
