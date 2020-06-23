@@ -524,7 +524,8 @@ private void forget() throws IOException, ExecutionException {
 
 >任何分布式共识算法，只要有一个进程宕机，剩余的进程存在永远无法达成共识的可能性。
 
-对于Paxos算法，很容易找到无法达成共识的情况，比如不同proposer的accept每次都因其他proposer产生的更高prepare编号而acceptor被拒绝。
+对于Paxos算法，很容易找到无法达成共识的情况，比如不同proposer的accept请求，每次都因其他proposer产生的更高prepare编号而被大部分acceptor拒绝。
+
 解决办法是在可能冲突时，引入随机等待，降低这种可能性，并在重试达到最大次数时，失败退出。如：
 ```{.java}
 if (!decided) {
