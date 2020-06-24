@@ -1,9 +1,20 @@
 body {
     margin: 0 auto;
-    max-width: 70%;
     color: #222;
     font-size: 14px;
     font-family: "Helvetica", "Arial", sans-serif;
+}
+@media screen and (min-width: 800px) { 
+  body {
+    max-width: 60em;
+  }
+} 
+
+@media screen and (max-width: 800px) { 
+  body {
+    margin: 1em;
+    max-width: 100%;
+  }
 }
 
 h1,
