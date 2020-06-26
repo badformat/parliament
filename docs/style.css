@@ -4,6 +4,11 @@ body {
     font-size: 14px;
     font-family: "Helvetica", "Arial", sans-serif;
 }
+
+.subtitle {
+  font-size: 1.3em;
+}
+
 @media screen and (min-width: 800px) { 
   body {
     max-width: 60em;

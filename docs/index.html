@@ -1,87 +1,56 @@
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <meta charset="utf-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
   <meta name="generator" content="pandoc" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>可容错的分布式系统设计</title>
+  <title>以容错为目标的分布式系统设计</title>
+  <style type="text/css">code{white-space: pre;}</style>
   <style type="text/css">
-      code{white-space: pre-wrap;}
-      span.smallcaps{font-variant: small-caps;}
-      span.underline{text-decoration: underline;}
-      div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.sourceCode { overflow-x: auto; }
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; color: #aaaaaa; border-right: 1px solid #aaaaaa; }
+td.sourceCode { padding-left: 5px; }
+code > span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code > span.dt { color: #902000; } /* DataType */
+code > span.dv { color: #40a070; } /* DecVal */
+code > span.bn { color: #40a070; } /* BaseN */
+code > span.fl { color: #40a070; } /* Float */
+code > span.ch { color: #4070a0; } /* Char */
+code > span.st { color: #4070a0; } /* String */
+code > span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code > span.ot { color: #007020; } /* Other */
+code > span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code > span.fu { color: #06287e; } /* Function */
+code > span.er { color: #ff0000; font-weight: bold; } /* Error */
+code > span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+code > span.cn { color: #880000; } /* Constant */
+code > span.sc { color: #4070a0; } /* SpecialChar */
+code > span.vs { color: #4070a0; } /* VerbatimString */
+code > span.ss { color: #bb6688; } /* SpecialString */
+code > span.im { } /* Import */
+code > span.va { color: #19177c; } /* Variable */
+code > span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code > span.op { color: #666666; } /* Operator */
+code > span.bu { } /* BuiltIn */
+code > span.ex { } /* Extension */
+code > span.pp { color: #bc7a00; } /* Preprocessor */
+code > span.at { color: #7d9029; } /* Attribute */
+code > span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code > span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code > span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
   </style>
-  <style type="text/css">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
-div.sourceCode { margin: 1em 0; }
-pre.sourceCode { margin: 0; }
-@media screen {
-div.sourceCode { overflow: auto; }
-}
-@media print {
-code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
-}
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(title);
-    position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
-    -webkit-touch-callout: none; -webkit-user-select: none;
-    -khtml-user-select: none; -moz-user-select: none;
-    -ms-user-select: none; user-select: none;
-    padding: 0 4px; width: 4em;
-    color: #aaaaaa;
-  }
-pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
-div.sourceCode
-  {  }
-@media screen {
-a.sourceLine::before { text-decoration: underline; }
-}
-code span.al { color: #ff0000; font-weight: bold; } /* Alert */
-code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
-code span.at { color: #7d9029; } /* Attribute */
-code span.bn { color: #40a070; } /* BaseN */
-code span.bu { } /* BuiltIn */
-code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
-code span.ch { color: #4070a0; } /* Char */
-code span.cn { color: #880000; } /* Constant */
-code span.co { color: #60a0b0; font-style: italic; } /* Comment */
-code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
-code span.do { color: #ba2121; font-style: italic; } /* Documentation */
-code span.dt { color: #902000; } /* DataType */
-code span.dv { color: #40a070; } /* DecVal */
-code span.er { color: #ff0000; font-weight: bold; } /* Error */
-code span.ex { } /* Extension */
-code span.fl { color: #40a070; } /* Float */
-code span.fu { color: #06287e; } /* Function */
-code span.im { } /* Import */
-code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
-code span.kw { color: #007020; font-weight: bold; } /* Keyword */
-code span.op { color: #666666; } /* Operator */
-code span.ot { color: #007020; } /* Other */
-code span.pp { color: #bc7a00; } /* Preprocessor */
-code span.sc { color: #4070a0; } /* SpecialChar */
-code span.ss { color: #bb6688; } /* SpecialString */
-code span.st { color: #4070a0; } /* String */
-code span.va { color: #19177c; } /* Variable */
-code span.vs { color: #4070a0; } /* VerbatimString */
-code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
-  </style>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css" type="text/css" />
 </head>
 <body>
-<header>
-<h1 class="title">可容错的分布式系统设计</h1>
-<p class="subtitle">以实现一个分布式leveldb服务为例</p>
-</header>
-<nav id="TOC">
+<div id="header">
+<h1 class="title">以容错为目标的分布式系统设计</h1>
+<h1 class="subtitle">从实现一个分布式leveldb服务为例</h1>
+</div>
+<div id="TOC">
 <ul>
 <li><a href="#背景">背景</a></li>
 <li><a href="#容错的定义">容错的定义</a></li>
@@ -107,7 +76,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </ul></li>
 <li><a href="#总结">总结</a></li>
 </ul>
-</nav>
+</div>
 <p>🚧注意：非终稿，不定期更新。</p>
 <h2 id="背景">背景</h2>
 <blockquote>
@@ -115,7 +84,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </blockquote>
 <p>所谓分布式系统，就是一群计算机通过网络协调完成某一串连贯的任务，是一个包含了各种工程实践及理论的庞杂话题。</p>
 <p>需要分布式系统的场景主要有两个：</p>
-<ol type="1">
+<ol style="list-style-type: decimal">
 <li>处理单机系统无法胜任的数据量或计算量，如海量存储、气候模拟等。</li>
 <li>使用多台机器进行容错，避免由于系统宕机、硬件故障、网络错误、机房火灾等意外情况导致的单点故障。</li>
 </ol>
@@ -136,18 +105,20 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>对于需要依赖持久化保存状态、实现功能的系统（如本文的leveldb key-value服务、数据库等），最常见的灾备方式便是主从复制：</p>
 <pre><code>一台机器提供服务，其他机器通过网络对这台机器的数据在本地进行备份。</code></pre>
 <p>如图：</p>
-<figure>
-<img src="./pb.png" alt="主从复制" /><figcaption>主从复制</figcaption>
-</figure>
+<div class="figure">
+<img src="./pb.png" alt="主从复制" />
+<p class="caption">主从复制</p>
+</div>
 <p>主从复制分为同步方式和异步方式，同步方式是指请求备份成功后返回给客户端结果，异步是指先返回结果给客户端再进行同步。</p>
 <p>如果主节点所在硬件被损坏，导致持久化的数据无法恢复，可以使用从节点的备份数据进行恢复。</p>
 <p>但是无论同步备份还是异步备份，都无法确保数据无丢失，因为主节点的任何备份操作都有可能因宕机无法通知到从节点。</p>
 <h3 id="高可用及单点故障">高可用及单点故障</h3>
 <p>以上实现的高可用性一般，因为只有一台从节点服务，如果该从节点宕机，为了降低数据丢失的风险， 我们可能需要暂停主节点，直到从服务恢复或替换成新的从节点。</p>
 <p>可以提供多台从节点提高可用性，只要有一台从节点可用，主节点就可以不用暂停服务。 如图：</p>
-<figure>
-<img src="./pb2.png" alt="高可用主从复制" /><figcaption>高可用主从复制</figcaption>
-</figure>
+<div class="figure">
+<img src="./pb2.png" alt="高可用主从复制" />
+<p class="caption">高可用主从复制</p>
+</div>
 <p>但这会导致一个新问题，某些节点和网络链路可能反复异常然后又恢复，导致从节点之间的备份数据相互不一致，需要额外的工作使各个从节点数据最终一致。</p>
 <p>除了这个问题，主从复制方案还存在单点故障问题，只要主节点进程失败，整个服务都不可用，无法满足我们的高可用需求。</p>
 <h2 id="副本进程">副本进程</h2>
@@ -155,9 +126,10 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>当某个节点宕机或网络不可达时，另一个节点可以继续为客户提供服务，宕机节点恢复后， 它可以从其他节点获取宕机后的日志进行回放，赶上其他节点的状态。</p>
 <h3 id="网络分区的问题">网络分区的问题</h3>
 <p>但是，网络分区会使得不同客户端可能会使用不同节点进行读写请求，如：</p>
-<figure>
-<img src="./pb3.png" alt="网络分区" /><figcaption>网络分区</figcaption>
-</figure>
+<div class="figure">
+<img src="./pb3.png" alt="网络分区" />
+<p class="caption">网络分区</p>
+</div>
 <p>某个时候开始，节点1与其他节点无法通信，分为两个网络，以key-value服务操作为例， 应用1先在节点1的网络分区，应用2在节点2的网络分区，并发执行写操作， 接着，应用1和2的分区同时进行了切换，对相同key进行读操作，就出现以下的现象：</p>
 <pre class="text"><code>客户端A在节点1执行：set(x,1)
 客户端B在节点2执行：set(x,2)
@@ -167,9 +139,10 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>比如在拍卖系统中，如果set操作代表的是某个用户的出价，这两个读写结果与用户预期是不符的，用户加价成功后，在一个客户端看到结果为2，在另一个客户端看到为1。</p>
 <p>以上现象本质是各个节点进程对同一个变量发生了写冲突，如何在发生写冲突后立刻发现并解决冲突呢？</p>
 <p>一种方案是一次写操作需写入w个节点，读操作读取r个节点，保证r+w&gt;n(系统所有节点的个数），就一定能发现冲突。如图：</p>
-<figure>
-<img src="./rwn.png" alt="r=3,w=3,n=5" /><figcaption>r=3,w=3,n=5</figcaption>
-</figure>
+<div class="figure">
+<img src="./rwn.png" alt="r=3,w=3,n=5" />
+<p class="caption">r=3,w=3,n=5</p>
+</div>
 <p>上图应用2在节点3的读取操作便发现了冲突，客户端需要某种策略确定保留一个版本。</p>
 <p>一种常见思路是更新时带上该数据更新时间，服务端使用最新版本，但是在分布式系统里，时钟是不可靠的，每台机器的时钟不可能完全同步，就连做到接近的代价都很大。</p>
 <p>举个例子，假设x此时为0，客户端A请求更新x为1，按照上面的算法，该请求在编号1,2,3的节点执行：</p>
@@ -211,9 +184,10 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>这个问题的本质是，所有的进程相关的状态变更，在所有节点上的顺序必须保持一致，且每个状态变更的结果对进程影响一致。</p>
 <p><strong>如果将每个节点进程看做一个单独的状态机，那么在前面输入都相同的情况下，每个状态机对当前输入的输出结果一定是一样的</strong>。</p>
 <p>这便是复制状态机的思想：</p>
-<figure>
-<img src="./rms.png" alt="复制状态机" /><figcaption>复制状态机</figcaption>
-</figure>
+<div class="figure">
+<img src="./rms.png" alt="复制状态机" />
+<p class="caption">复制状态机</p>
+</div>
 <h3 id="共识问题">共识问题</h3>
 <p>如果对每个状态变更进行递增编号，只要保证每个节点对相同编号的变更内容一致，即可实现复制状态机，这种做法称为全序广播或原子广播。 全序广播可以保证顺序一致性。</p>
 <p>这就把问题变成了一个典型的分布式共识问题：</p>
@@ -251,7 +225,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </blockquote>
 <p>因为任何大多数接收者集合S，和C至少有一个公共接收者，编号为n的提案w被批准，那么只有两种情况：</p>
 <blockquote>
-<ol type="1">
+<ol style="list-style-type: decimal">
 <li>存在一个包含大多数接收者的集合S，从未接受过小于n的提案。</li>
 <li>w和S中所有已接受的、编号小于n的最大编号提案值相同，即值为v。因为公共接收者需要批准相同的提案值。</li>
 </ol>
@@ -264,14 +238,14 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>接收者拒绝接受编号比当前已知最大编号n更小的提案。</p>
 </blockquote>
 <p>得到Paxos算法过程如下：</p>
-<ol type="1">
+<ol style="list-style-type: decimal">
 <li>prepare阶段：
-<ol type="1">
+<ol style="list-style-type: decimal">
 <li>发起者选择一个提案编号n并将prepare请求发送给接收者中的一个多数派；</li>
 <li>接收者收到prepare消息后，如果提案的编号大于它已经回复的所有prepare消息(回复消息表示接受accept)， 则接收者将自己上次接受的提案回复给发起者，并承诺不再回复小于n的提案；如果没有回复过prepare消息，也承诺不再回复小于n的提案。</li>
 </ol></li>
 <li>accept阶段：
-<ol type="1">
+<ol style="list-style-type: decimal">
 <li>当一个发起者收到了多数接收者对prepare的回复后，就进入批准阶段。 它要向回复prepare请求的接收者发送accept请求，包括编号n和prepare阶段返回的小于n的最大提案的值。</li>
 <li>如果accept的提案编号n大于等于接收者已承诺的编号值，接收者就批准这个请求。</li>
 <li>accept被多数派批准后，发起者再通知所有接收者提案已批准（decided)的消息。</li>
@@ -298,44 +272,44 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </ul>
 <p>除了ARRAY可以包含其他类型和ARRAY本身，处理稍稍麻烦外，其他类型都容易解析。</p>
 <p>使用JAVA标准库中ByteBuffer类直接解析协议是比较困难的，不能等到报文读取完成后，才开始解析，因为错误格式的报文可能导致读取一直无法完成。</p>
-<p>另外，报文处理往往需要“回溯”操作，从之前某个位置重新开始解析。使用ByteBuffer的flip和rewind、reset太底层，抽象层次不够。</p>
+<p>另外，报文处理往往需要&quot;回溯&quot;操作，从之前某个位置重新开始解析。使用ByteBuffer的flip和rewind、reset太底层，抽象层次不够。</p>
 <p>所以通过实现自己的<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/resp/ByteBuf.java">ByteBuf</a>进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短，数据量较小，无法体现其优势，byte[]在这里满足要求了。</p>
 <h2 id="实现复制状态机">实现复制状态机</h2>
 <p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>收到请求后，不会立即执行， 而是交给<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java">ReplicateStateMachine</a>生成一个新的状态机输入， 并委托其对该输入所在编号的操作达成共识，共识达成后，ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。</p>
 <p>如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。 详情见<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java">ReplicateStateMachine</a>的apply方法。</p>
-<p>这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的“append x y”请求如不加id会达成一次共识，但实际只执行了一次， value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb10-1" title="1"><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {</a>
-<a class="sourceLine" id="cb10-2" title="2">    <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();</a>
-<a class="sourceLine" id="cb10-3" title="3">}</a></code></pre></div>
+<p>这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的&quot;append x y&quot;请求如不加id会达成一次共识，但实际只执行了一次， value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：</p>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {
+    <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();
+}</code></pre></div>
 <p>ReplicateStateMachine可以并发进行多个Paxos共识实例，每个实例递增分配一个编号，所有RSM实例都按照编号顺序，使用后台线程顺序执行所有编号的共识结果。</p>
 <p>顺序执行意味着KeyValueEngine无法并发处理已完成共识的各个请求，如果需要提高并发性，需要保证不同机器并发执行的结果一样，这是比较困难的， 需要完善各种锁机制和并发控制，这里不做实现。</p>
 <p>进程可能在KeyValueEngine执行数据操作命令过程中失败，或者执行完成，但在返回ReplicateStateMachine前失败，服务需要在恢复时恢复之前的正确状态。 一般需要采用<a href="https://en.wikipedia.org/wiki/Write-ahead_logging">写前日志</a>技术保证可恢复，我们的RSM使用leveldb保存各种内部状态，leveldb本身实现了写前日志。</p>
 <p>比如保存当前执行的编号：</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb11-1" title="1"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">writeRedoLog</span>(<span class="dt">int</span> id) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb11-2" title="2">    persistence.<span class="fu">put</span>(RSM_DONE_REDO, <span class="bu">ByteBuffer</span>.<span class="fu">allocate</span>(<span class="dv">4</span>).<span class="fu">putInt</span>(id).<span class="fu">array</span>());</a>
-<a class="sourceLine" id="cb11-3" title="3">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">writeRedoLog</span>(<span class="dt">int</span> id) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    persistence.<span class="fu">put</span>(RSM_DONE_REDO, <span class="bu">ByteBuffer</span>.<span class="fu">allocate</span>(<span class="dv">4</span>).<span class="fu">putInt</span>(id).<span class="fu">array</span>());
+}</code></pre></div>
 <p>执行成功后，删掉该记录：</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb12-1" title="1"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">removeRedoLog</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb12-2" title="2">    persistence.<span class="fu">del</span>(RSM_DONE_REDO);</a>
-<a class="sourceLine" id="cb12-3" title="3">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">removeRedoLog</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    persistence.<span class="fu">del</span>(RSM_DONE_REDO);
+}</code></pre></div>
 <p>如果进程中途宕机，进程重启时，会检查相关日志，恢复相关执行现场：</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb13-1" title="1"><span class="kw">public</span> <span class="dt">void</span> <span class="fu">start</span>(StateTransfer transfer, <span class="bu">Executor</span> executor)</a>
-<a class="sourceLine" id="cb13-2" title="2">        <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb13-3" title="3">    <span class="kw">this</span>.<span class="fu">stateTransfer</span> = transfer;</a>
-<a class="sourceLine" id="cb13-4" title="4">    <span class="bu">Integer</span> d = <span class="fu">getRedoLog</span>();</a>
-<a class="sourceLine" id="cb13-5" title="5">    <span class="kw">if</span> (d != <span class="kw">null</span>) {</a>
-<a class="sourceLine" id="cb13-6" title="6">        <span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">set</span>(d);</a>
-<a class="sourceLine" id="cb13-7" title="7">    } <span class="kw">else</span> {</a>
-<a class="sourceLine" id="cb13-8" title="8">        <span class="dt">byte</span>[] bytes = persistence.<span class="fu">get</span>(RSM_DONE);</a>
-<a class="sourceLine" id="cb13-9" title="9">        <span class="kw">if</span> (bytes == <span class="kw">null</span>) {</a>
-<a class="sourceLine" id="cb13-10" title="10">            <span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">set</span>(-<span class="dv">1</span>);</a>
-<a class="sourceLine" id="cb13-11" title="11">        } <span class="kw">else</span> {</a>
-<a class="sourceLine" id="cb13-12" title="12">            <span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">set</span>(<span class="bu">ByteBuffer</span>.<span class="fu">wrap</span>(bytes).<span class="fu">getInt</span>());</a>
-<a class="sourceLine" id="cb13-13" title="13">        }</a>
-<a class="sourceLine" id="cb13-14" title="14">    }</a>
-<a class="sourceLine" id="cb13-15" title="15">    sequence.<span class="fu">set</span>(<span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">get</span>() + <span class="dv">1</span>);</a>
-<a class="sourceLine" id="cb13-16" title="16">    <span class="co">// ... 恢复完成，启动RSM线程服务</span></a>
-<a class="sourceLine" id="cb13-17" title="17">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">public</span> <span class="dt">void</span> <span class="fu">start</span>(StateTransfer transfer, <span class="bu">Executor</span> executor)
+        <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    <span class="kw">this</span>.<span class="fu">stateTransfer</span> = transfer;
+    <span class="bu">Integer</span> d = <span class="fu">getRedoLog</span>();
+    <span class="kw">if</span> (d != <span class="kw">null</span>) {
+        <span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">set</span>(d);
+    } <span class="kw">else</span> {
+        <span class="dt">byte</span>[] bytes = persistence.<span class="fu">get</span>(RSM_DONE);
+        <span class="kw">if</span> (bytes == <span class="kw">null</span>) {
+            <span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">set</span>(-<span class="dv">1</span>);
+        } <span class="kw">else</span> {
+            <span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">set</span>(<span class="bu">ByteBuffer</span>.<span class="fu">wrap</span>(bytes).<span class="fu">getInt</span>());
+        }
+    }
+    sequence.<span class="fu">set</span>(<span class="kw">this</span>.<span class="fu">done</span>.<span class="fu">get</span>() + <span class="dv">1</span>);
+    <span class="co">// ... 恢复完成，启动RSM线程服务</span>
+}</code></pre></div>
 <p>leveldb的SET、DEL、GET都是幂等的，重复执行没有问题，只要保证不漏掉命令就行。具体可查看start方法和apply方法。</p>
 <p>ReplicateStateMachine并发提交共识请求给共识服务<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/Coordinator.java">Coordinator</a>。 Coordinator可以由各种共识算法实现，这里是Paxos实现。提供Coordinator接口是为了方便测试mock和扩展。</p>
 <h2 id="实现paxos共识算法">实现Paxos共识算法</h2>
@@ -383,75 +357,75 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>这些Proxy及Server相当于简单实现了一个RPC框架。</p>
 <p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/InetPeerAcceptors.java">InetPeerAcceptors</a>为SyncProxyAceptor的创建工厂， 使用一个简单的<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/ConnectionPool.java">连接池</a>为SyncProxyAcceptor提供nio channel实例。</p>
 <p>接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。 如prepare方法的代理：</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb15-1" title="1">Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {</a>
-<a class="sourceLine" id="cb15-2" title="2">    <span class="kw">synchronized</span> (channel) {</a>
-<a class="sourceLine" id="cb15-3" title="3">        <span class="bu">ByteBuffer</span> request = codec.<span class="fu">encodePrepare</span>(round, n);</a>
-<a class="sourceLine" id="cb15-4" title="4">        <span class="kw">while</span> (request.<span class="fu">hasRemaining</span>()) {</a>
-<a class="sourceLine" id="cb15-5" title="5">            channel.<span class="fu">write</span>(request);</a>
-<a class="sourceLine" id="cb15-6" title="6">        }</a>
-<a class="sourceLine" id="cb15-7" title="7"></a>
-<a class="sourceLine" id="cb15-8" title="8">        <span class="kw">return</span> codec.<span class="fu">decodePrepare</span>(channel, n);</a>
-<a class="sourceLine" id="cb15-9" title="9">    }</a>
-<a class="sourceLine" id="cb15-10" title="10">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java">Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {
+    <span class="kw">synchronized</span> (channel) {
+        <span class="bu">ByteBuffer</span> request = codec.<span class="fu">encodePrepare</span>(round, n);
+        <span class="kw">while</span> (request.<span class="fu">hasRemaining</span>()) {
+            channel.<span class="fu">write</span>(request);
+        }
+
+        <span class="kw">return</span> codec.<span class="fu">decodePrepare</span>(channel, n);
+    }
+}</code></pre></div>
 <h3 id="正确性保证">正确性保证</h3>
 <p>Paxos伪代码很简单，但是在进程可能异常退出的情况下，是不够完备的。进程被杀死、断电都会导致正在共识协商的进程退出，并在恢复后，出现错误的结果。</p>
 <p>举个例子，多数派为某个编号的共识实例通过了一个提案，但是在decide阶段，多数派全部异常退出，只有多数派以外的节点处理了提案结果。 稍后这些多数派又恢复，之前的信息已经丢失，此时又收到同一个共识实例编号的另一个提案，此提案被通过，和未异常退出的节点接受的提案不一致。</p>
 <p>所以，在prepare和accept阶段，都需要持久化Acceptor的状态，同样在这里使用leveldb接口即可，实例化Acceptor时，先尝试恢复已持久化的状态。 并通过一个定期的心跳请求，学习其他节点的共识结果，快速赶上进度，见heartbeat方法：</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb16-1" title="1"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">heartbeat</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb16-2" title="2">    <span class="dt">int</span> begin = <span class="fu">done</span>() + <span class="dv">1</span>;</a>
-<a class="sourceLine" id="cb16-3" title="3">    Preconditions.<span class="fu">checkState</span>(begin &gt;= <span class="dv">0</span>);</a>
-<a class="sourceLine" id="cb16-4" title="4">    <span class="dt">int</span> end = coordinator.<span class="fu">max</span>();</a>
-<a class="sourceLine" id="cb16-5" title="5">    <span class="kw">while</span> (begin &lt;= end) {</a>
-<a class="sourceLine" id="cb16-6" title="6">        coordinator.<span class="fu">learn</span>(begin);</a>
-<a class="sourceLine" id="cb16-7" title="7">        begin++;</a>
-<a class="sourceLine" id="cb16-8" title="8">    }</a>
-<a class="sourceLine" id="cb16-9" title="9">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">heartbeat</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    <span class="dt">int</span> begin = <span class="fu">done</span>() + <span class="dv">1</span>;
+    Preconditions.<span class="fu">checkState</span>(begin &gt;= <span class="dv">0</span>);
+    <span class="dt">int</span> end = coordinator.<span class="fu">max</span>();
+    <span class="kw">while</span> (begin &lt;= end) {
+        coordinator.<span class="fu">learn</span>(begin);
+        begin++;
+    }
+}</code></pre></div>
 <p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java">LocalAcceptor</a>的prepare方法也需要防止中途宕机， 防止重启时又投票给不同的共识内容。</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb17-1" title="1"><span class="at">@Override</span></a>
-<a class="sourceLine" id="cb17-2" title="2"><span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {</a>
-<a class="sourceLine" id="cb17-3" title="3">    <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {</a>
-<a class="sourceLine" id="cb17-4" title="4">        np = n;</a>
-<a class="sourceLine" id="cb17-5" title="5">        <span class="fu">persistence</span>(); <span class="co">// 保存状态</span></a>
-<a class="sourceLine" id="cb17-6" title="6">        <span class="kw">return</span> Prepare.<span class="fu">ok</span>(n, na, va);</a>
-<a class="sourceLine" id="cb17-7" title="7">    }</a>
-<a class="sourceLine" id="cb17-8" title="8">    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);</a>
-<a class="sourceLine" id="cb17-9" title="9">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="at">@Override</span>
+<span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {
+    <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {
+        np = n;
+        <span class="fu">persistence</span>(); <span class="co">// 保存状态</span>
+        <span class="kw">return</span> Prepare.<span class="fu">ok</span>(n, na, va);
+    }
+    <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);
+}</code></pre></div>
 <p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb18-1" title="1"><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb18-2" title="2">    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {</a>
-<a class="sourceLine" id="cb18-3" title="3">        <span class="kw">return</span>;</a>
-<a class="sourceLine" id="cb18-4" title="4">    }</a>
-<a class="sourceLine" id="cb18-5" title="5">    persistence.<span class="fu">put</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNp</span>().<span class="fu">getBytes</span>());</a>
-<a class="sourceLine" id="cb18-6" title="6">    <span class="kw">if</span> (!Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNa</span>())) {</a>
-<a class="sourceLine" id="cb18-7" title="7">        persistence.<span class="fu">put</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNa</span>().<span class="fu">getBytes</span>());</a>
-<a class="sourceLine" id="cb18-8" title="8">    }</a>
-<a class="sourceLine" id="cb18-9" title="9">    <span class="kw">if</span> (acceptor.<span class="fu">getVa</span>() != <span class="kw">null</span>) {</a>
-<a class="sourceLine" id="cb18-10" title="10">        persistence.<span class="fu">put</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getVa</span>());</a>
-<a class="sourceLine" id="cb18-11" title="11">    }</a>
-<a class="sourceLine" id="cb18-12" title="12">}</a>
-<a class="sourceLine" id="cb18-13" title="13"></a>
-<a class="sourceLine" id="cb18-14" title="14">Optional&lt;LocalAcceptor&gt; <span class="fu">regainAcceptor</span>(<span class="dt">int</span> round) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb18-15" title="15">    <span class="dt">byte</span>[] np = persistence.<span class="fu">get</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>());</a>
-<a class="sourceLine" id="cb18-16" title="16"></a>
-<a class="sourceLine" id="cb18-17" title="17">    <span class="kw">if</span> (np == <span class="kw">null</span>) {</a>
-<a class="sourceLine" id="cb18-18" title="18">        <span class="kw">return</span> Optional.<span class="fu">empty</span>();</a>
-<a class="sourceLine" id="cb18-19" title="19">    }</a>
-<a class="sourceLine" id="cb18-20" title="20">    <span class="dt">byte</span>[] na = persistence.<span class="fu">get</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>());</a>
-<a class="sourceLine" id="cb18-21" title="21">    <span class="dt">byte</span>[] va = persistence.<span class="fu">get</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>());</a>
-<a class="sourceLine" id="cb18-22" title="22"></a>
-<a class="sourceLine" id="cb18-23" title="23">    <span class="bu">String</span> nps = <span class="kw">new</span> <span class="bu">String</span>(np);</a>
-<a class="sourceLine" id="cb18-24" title="24">    <span class="bu">String</span> nas = na == <span class="kw">null</span> ? <span class="kw">null</span> : <span class="kw">new</span> <span class="bu">String</span>(na);</a>
-<a class="sourceLine" id="cb18-25" title="25"></a>
-<a class="sourceLine" id="cb18-26" title="26">    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));</a>
-<a class="sourceLine" id="cb18-27" title="27">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {
+        <span class="kw">return</span>;
+    }
+    persistence.<span class="fu">put</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNp</span>().<span class="fu">getBytes</span>());
+    <span class="kw">if</span> (!Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNa</span>())) {
+        persistence.<span class="fu">put</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getNa</span>().<span class="fu">getBytes</span>());
+    }
+    <span class="kw">if</span> (acceptor.<span class="fu">getVa</span>() != <span class="kw">null</span>) {
+        persistence.<span class="fu">put</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>(), acceptor.<span class="fu">getVa</span>());
+    }
+}
+
+Optional&lt;LocalAcceptor&gt; <span class="fu">regainAcceptor</span>(<span class="dt">int</span> round) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    <span class="dt">byte</span>[] np = persistence.<span class="fu">get</span>((round + <span class="st">&quot;np&quot;</span>).<span class="fu">getBytes</span>());
+
+    <span class="kw">if</span> (np == <span class="kw">null</span>) {
+        <span class="kw">return</span> Optional.<span class="fu">empty</span>();
+    }
+    <span class="dt">byte</span>[] na = persistence.<span class="fu">get</span>((round + <span class="st">&quot;na&quot;</span>).<span class="fu">getBytes</span>());
+    <span class="dt">byte</span>[] va = persistence.<span class="fu">get</span>((round + <span class="st">&quot;va&quot;</span>).<span class="fu">getBytes</span>());
+
+    <span class="bu">String</span> nps = <span class="kw">new</span> <span class="bu">String</span>(np);
+    <span class="bu">String</span> nas = na == <span class="kw">null</span> ? <span class="kw">null</span> : <span class="kw">new</span> <span class="bu">String</span>(na);
+
+    <span class="kw">return</span> Optional.<span class="fu">of</span>(<span class="kw">new</span> <span class="fu">LocalAcceptorWithPersistence</span>(round, nps, nas, va));
+}</code></pre></div>
 <p>输入一直在增长，需要删除共识服务中已经处理完成的输入，见RSM的forget方法：</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb19-1" title="1"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">forget</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {</a>
-<a class="sourceLine" id="cb19-2" title="2">    <span class="co">// 一次处理一百条</span></a>
-<a class="sourceLine" id="cb19-3" title="3">    <span class="kw">if</span> (threshold.<span class="fu">incrementAndGet</span>() &gt; <span class="dv">100</span>) {</a>
-<a class="sourceLine" id="cb19-4" title="4">        threshold.<span class="fu">set</span>(<span class="dv">0</span>);</a>
-<a class="sourceLine" id="cb19-5" title="5">        coordinator.<span class="fu">forget</span>(<span class="fu">done</span>());</a>
-<a class="sourceLine" id="cb19-6" title="6">    }</a>
-<a class="sourceLine" id="cb19-7" title="7">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">private</span> <span class="dt">void</span> <span class="fu">forget</span>() <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
+    <span class="co">// 一次处理一百条</span>
+    <span class="kw">if</span> (threshold.<span class="fu">incrementAndGet</span>() &gt; <span class="dv">100</span>) {
+        threshold.<span class="fu">set</span>(<span class="dv">0</span>);
+        coordinator.<span class="fu">forget</span>(<span class="fu">done</span>());
+    }
+}</code></pre></div>
 <h3 id="活跃性问题">活跃性问题</h3>
 <p>根据<a href="https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/">FLP不可能原理</a>：</p>
 <blockquote>
@@ -459,19 +433,19 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </blockquote>
 <p>对于Paxos算法，很容易找到无法达成共识的情况，比如不同proposer的accept请求，每次都因其他proposer产生的更高prepare编号而被大部分acceptor拒绝。</p>
 <p>解决办法是在可能冲突时，引入随机等待，降低这种可能性，并在重试达到最大次数时，失败退出。如：</p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode java"><code class="sourceCode java"><a class="sourceLine" id="cb20-1" title="1"><span class="kw">if</span> (!decided) {</a>
-<a class="sourceLine" id="cb20-2" title="2">    retryCount++;</a>
-<a class="sourceLine" id="cb20-3" title="3">    <span class="kw">try</span> {</a>
-<a class="sourceLine" id="cb20-4" title="4">        <span class="bu">Thread</span>.<span class="fu">sleep</span>(<span class="bu">Math</span>.<span class="fu">abs</span>(random.<span class="fu">nextInt</span>()) % <span class="dv">300</span>);</a>
-<a class="sourceLine" id="cb20-5" title="5">    } <span class="kw">catch</span> (<span class="bu">InterruptedException</span> e) {</a>
-<a class="sourceLine" id="cb20-6" title="6">        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.&quot;</span>, e);</a>
-<a class="sourceLine" id="cb20-7" title="7">        <span class="kw">return</span> <span class="kw">null</span>;</a>
-<a class="sourceLine" id="cb20-8" title="8">    }</a>
-<a class="sourceLine" id="cb20-9" title="9">    <span class="kw">if</span> (retryCount &gt;= <span class="dv">7</span>) {</a>
-<a class="sourceLine" id="cb20-10" title="10">        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.Retried {} times.&quot;</span>, <span class="dv">7</span>);</a>
-<a class="sourceLine" id="cb20-11" title="11">        <span class="kw">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span>();</a>
-<a class="sourceLine" id="cb20-12" title="12">    }</a>
-<a class="sourceLine" id="cb20-13" title="13">}</a></code></pre></div>
+<div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">if</span> (!decided) {
+    retryCount++;
+    <span class="kw">try</span> {
+        <span class="bu">Thread</span>.<span class="fu">sleep</span>(<span class="bu">Math</span>.<span class="fu">abs</span>(random.<span class="fu">nextInt</span>()) % <span class="dv">300</span>);
+    } <span class="kw">catch</span> (<span class="bu">InterruptedException</span> e) {
+        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.&quot;</span>, e);
+        <span class="kw">return</span> <span class="kw">null</span>;
+    }
+    <span class="kw">if</span> (retryCount &gt;= <span class="dv">7</span>) {
+        logger.<span class="fu">error</span>(<span class="st">&quot;Failed in propose.Retried {} times.&quot;</span>, <span class="dv">7</span>);
+        <span class="kw">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span>();
+    }
+}</code></pre></div>
 <p>如果去掉这个随机等待，在多核机器运行单元测试非常容易出现重试失败。</p>
 <h2 id="总结">总结</h2>
 <p>到这里，系统基本功能就完成了。我们的系统很简单，但是低并发的场景，也够用了。</p>
