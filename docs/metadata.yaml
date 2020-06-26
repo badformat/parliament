@@ -1,4 +1,4 @@
 ---
-title:  '以容错为目标的分布式系统设计'
-subtitle: '从实现一个分布式leveldb服务为例'
+title:  '以容错为目标的分布式系统设计过程'
+subtitle: '用一个leveldb分布式服务实现过程为例'
 ...
