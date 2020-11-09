@@ -90,7 +90,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 </ol>
 <p>某些系统同时存在以上两种需求，而使用分布式进行容错包含了分布式系统设计的很多难点和精髓，只是资料阅读很难让人体会到其中的乐趣和困难。</p>
 <p>所以笔者在业余时间，通过将一个单机的<a href="https://github.com/dain/leveldb">leveldb</a>实现扩展为分布式容错实现， 检验、加深了自己对分布式系统实现的理解，整理出本篇文档，给同样对相关主题感兴趣的读者提供思路。</p>
-<p>项目源码及构建、运行方式请参看：<a href="https://github.com/z42y/parliament/">项目主页</a>。</p>
+<p>项目源码及构建、运行方式请参看：<a href="https://github.com/akabldr/parliament/">项目主页</a>。</p>
 <p>代码里的leveldb功能采用了现有的一个java版本的<a href="https://github.com/dain/leveldb">单机实现</a>， 在本项目中，在其基础上实现了基于redis协议的网络接口及分布式容错设计。</p>
 <h2 id="容错的定义">容错的定义</h2>
 <p>容错经常和灾备、高可用混淆，三者可以通过例子简单的<a href="http://www.pbenson.net/2014/02/the-difference-between-fault-tolerance-high-availability-disaster-recovery/">区分</a>：</p>
@@ -256,13 +256,13 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 <h2 id="键值服务的代码实现">键值服务的代码实现</h2>
 <p>提供服务的第一步是接受、解析客户端通过网络发送的命令请求，使用JAVA NIO处理。</p>
 <h3 id="java-nio的使用">JAVA NIO的使用</h3>
-<p>首先打开socket接收客户连接，在连接成功的channel上挂载一个响应redis请求的handler——<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/resp/RespReadHandler.java">RespReadHandler</a>。 使用<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java">RespDecoder</a>类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断请求是否解析完成。</p>
-<p>解码完成后，使用<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>进行真正的键值读写处理，此处先不考虑KeyValueEngine的实现细节。</p>
-<p>执行完客户端命令后，ReadHandler新建一个<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/resp/RespWriteHandler.java">RespWriteHandler</a>将结果返回给客户端， 接着重新挂载一个RespReadHandler进行下一个请求处理。</p>
+<p>首先打开socket接收客户连接，在连接成功的channel上挂载一个响应redis请求的handler——<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespReadHandler.java">RespReadHandler</a>。 使用<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java">RespDecoder</a>类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断请求是否解析完成。</p>
+<p>解码完成后，使用<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>进行真正的键值读写处理，此处先不考虑KeyValueEngine的实现细节。</p>
+<p>执行完客户端命令后，ReadHandler新建一个<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespWriteHandler.java">RespWriteHandler</a>将结果返回给客户端， 接着重新挂载一个RespReadHandler进行下一个请求处理。</p>
 <p>重新生成RespWriterHandler和RespReadHandler是为了方便进行GC，当然可以手工管理各种buffer的回收和重利用，这里不做详细设计了。</p>
-<p>因为保存的对象都比较小，<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>并没有使用InputStream之类的模式进一步提升异步性能。</p>
+<p>因为保存的对象都比较小，<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>并没有使用InputStream之类的模式进一步提升异步性能。</p>
 <h3 id="网络协议的解析构造">网络协议的解析构造</h3>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java">RespDecoder</a>是redis的<a href="https://redis.io/topics/protocol">RESP协议</a>解码器， RESP一共有以下几种数据类型：</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java">RespDecoder</a>是redis的<a href="https://redis.io/topics/protocol">RESP协议</a>解码器， RESP一共有以下几种数据类型：</p>
 <ul>
 <li>SIMPLE_STRING 字符串</li>
 <li>ERROR 错误字符串</li>
@@ -273,10 +273,10 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 <p>除了ARRAY可以包含其他类型和ARRAY本身，处理稍稍麻烦外，其他类型都容易解析。</p>
 <p>使用JAVA标准库中ByteBuffer类直接解析协议是比较困难的，不能等到报文读取完成后，才开始解析，因为错误格式的报文可能导致读取一直无法完成。</p>
 <p>另外，报文处理往往需要&quot;回溯&quot;操作，从之前某个位置重新开始解析。使用ByteBuffer的flip和rewind、reset太底层，抽象层次不够。</p>
-<p>所以通过实现自己的<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/resp/ByteBuf.java">ByteBuf</a>进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短，数据量较小，无法体现其优势，byte[]在这里满足要求了。</p>
+<p>所以通过实现自己的<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/ByteBuf.java">ByteBuf</a>进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短，数据量较小，无法体现其优势，byte[]在这里满足要求了。</p>
 <h2 id="实现复制状态机">实现复制状态机</h2>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>收到请求后，不会立即执行， 而是交给<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java">ReplicateStateMachine</a>生成一个新的状态机输入， 并委托其对该输入所在编号的操作达成共识，共识达成后，ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。</p>
-<p>如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。 详情见<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java">ReplicateStateMachine</a>的apply方法。</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java">KeyValueEngine</a>收到请求后，不会立即执行， 而是交给<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java">ReplicateStateMachine</a>生成一个新的状态机输入， 并委托其对该输入所在编号的操作达成共识，共识达成后，ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。</p>
+<p>如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。 详情见<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java">ReplicateStateMachine</a>的apply方法。</p>
 <p>这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的&quot;append x y&quot;请求如不加id会达成一次共识，但实际只执行了一次， value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：</p>
 <div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="kw">public</span> Input <span class="fu">newState</span>(<span class="dt">byte</span>[] content) <span class="kw">throws</span> DuplicateKeyException {
     <span class="kw">return</span> Input.<span class="fu">builder</span>().<span class="fu">id</span>(<span class="fu">next</span>()).<span class="fu">uuid</span>(<span class="fu">uuid</span>()).<span class="fu">content</span>(content).<span class="fu">build</span>();
@@ -311,7 +311,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
     <span class="co">// ... 恢复完成，启动RSM线程服务</span>
 }</code></pre></div>
 <p>leveldb的SET、DEL、GET都是幂等的，重复执行没有问题，只要保证不漏掉命令就行。具体可查看start方法和apply方法。</p>
-<p>ReplicateStateMachine并发提交共识请求给共识服务<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/Coordinator.java">Coordinator</a>。 Coordinator可以由各种共识算法实现，这里是Paxos实现。提供Coordinator接口是为了方便测试mock和扩展。</p>
+<p>ReplicateStateMachine并发提交共识请求给共识服务<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/Coordinator.java">Coordinator</a>。 Coordinator可以由各种共识算法实现，这里是Paxos实现。提供Coordinator接口是为了方便测试mock和扩展。</p>
 <h2 id="实现paxos共识算法">实现Paxos共识算法</h2>
 <p>完成一次共识过程的Paxos<a href="http://nil.csail.mit.edu/6.824/2015/notes/paxos-code.html">伪代码</a>如下：</p>
 <pre><code>--- Paxos Proposer ---
@@ -350,12 +350,12 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
     24   else
     25     reply accept_reject</code></pre>
 <p>Paxos算法有优化版本，如multi-paxos可以减少一次请求，我们使用原始算法。</p>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java">Paxos类</a>作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。 他为每个共识实例创建相应的发起者（proposer)，同时为本节点和其他节点的发起者创建、管理对应的接收者（acceptor)。</p>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/proposer/Proposer.java">Proposer</a>为算法发起者实现， <a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java">LocalAcceptor</a>为算法接收者实现。</p>
-<p>各个实例的提案请求可能来自其他节点，所以需要提供一个网络服务<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/server/PaxosServer.java">PaxosServer</a>， 通过参数中的编号区分不同共识过程实例，转发给不同实例的本地接收者处理，然后返回响应。</p>
-<p>配套的，提供<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/SyncProxyAcceptor.java">SyncProxyAcceptor</a>作为远端接收者的本地网络代理， 请求各个PaxosServer完成提案过程。</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java">Paxos类</a>作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。 他为每个共识实例创建相应的发起者（proposer)，同时为本节点和其他节点的发起者创建、管理对应的接收者（acceptor)。</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/proposer/Proposer.java">Proposer</a>为算法发起者实现， <a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java">LocalAcceptor</a>为算法接收者实现。</p>
+<p>各个实例的提案请求可能来自其他节点，所以需要提供一个网络服务<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/server/PaxosServer.java">PaxosServer</a>， 通过参数中的编号区分不同共识过程实例，转发给不同实例的本地接收者处理，然后返回响应。</p>
+<p>配套的，提供<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/SyncProxyAcceptor.java">SyncProxyAcceptor</a>作为远端接收者的本地网络代理， 请求各个PaxosServer完成提案过程。</p>
 <p>这些Proxy及Server相当于简单实现了一个RPC框架。</p>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/InetPeerAcceptors.java">InetPeerAcceptors</a>为SyncProxyAceptor的创建工厂， 使用一个简单的<a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/ConnectionPool.java">连接池</a>为SyncProxyAcceptor提供nio channel实例。</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/InetPeerAcceptors.java">InetPeerAcceptors</a>为SyncProxyAceptor的创建工厂， 使用一个简单的<a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/ConnectionPool.java">连接池</a>为SyncProxyAcceptor提供nio channel实例。</p>
 <p>接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。 如prepare方法的代理：</p>
 <div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java">Prepare <span class="fu">delegatePrepare</span>(<span class="dt">int</span> round, <span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">IOException</span> {
     <span class="kw">synchronized</span> (channel) {
@@ -380,7 +380,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
         begin++;
     }
 }</code></pre></div>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java">LocalAcceptor</a>的prepare方法也需要防止中途宕机， 防止重启时又投票给不同的共识内容。</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java">LocalAcceptor</a>的prepare方法也需要防止中途宕机， 防止重启时又投票给不同的共识内容。</p>
 <div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="at">@Override</span>
 <span class="kw">public</span> <span class="kw">synchronized</span> Prepare <span class="fu">prepare</span>(<span class="bu">String</span> n) <span class="kw">throws</span> <span class="bu">Exception</span> {
     <span class="kw">if</span> (np == <span class="kw">null</span> || n.<span class="fu">compareTo</span>(np) &gt; <span class="dv">0</span>) {
@@ -390,7 +390,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
     }
     <span class="kw">return</span> Prepare.<span class="fu">reject</span>(n);
 }</code></pre></div>
-<p><a href="https://github.com/z42y/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
+<p><a href="https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java">Paxos类</a>保存和恢复acceptor的方法分别如下：</p>
 <div class="sourceCode"><pre class="sourceCode java"><code class="sourceCode java"><span class="dt">void</span> <span class="fu">persistenceAcceptor</span>(<span class="dt">int</span> round, LocalAcceptor acceptor) <span class="kw">throws</span> <span class="bu">IOException</span>, <span class="bu">ExecutionException</span> {
     <span class="kw">if</span> (Strings.<span class="fu">isNullOrEmpty</span>(acceptor.<span class="fu">getNp</span>())) {
         <span class="kw">return</span>;

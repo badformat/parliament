@@ -4,7 +4,7 @@ parliament是一个带持久化的分布式缓存服务器，基于JDK 8+。
 
 **业余项目，生产环境使用，请自担风险**。
 
-详情见文档：[分布式系统实践入门：以实现一个分布式键值服务为例](https://z42y.github.io/parliament/)。
+详情见文档：[分布式系统实践入门：以实现一个分布式键值服务为例](https://akabldr.github.io/parliament/)。
 
 # 构建
 - Apache Maven
