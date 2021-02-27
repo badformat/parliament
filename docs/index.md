@@ -16,7 +16,7 @@
 所以笔者在业余时间，通过将一个单机的[leveldb](https://github.com/dain/leveldb)实现扩展为分布式容错实现，
 检验、加深了自己对分布式系统实现的理解，整理出本篇文档，给同样对相关主题感兴趣的读者提供思路。
 
-项目源码及构建、运行方式请参看：[项目主页](https://github.com/akabldr/parliament/)。
+项目源码及构建、运行方式请参看：[项目主页](https://github.com/rettrue/parliament/)。
 
 代码里的leveldb功能采用了现有的一个java版本的[单机实现](https://github.com/dain/leveldb)，
 在本项目中，在其基础上实现了基于redis协议的网络接口及分布式容错设计。
@@ -272,21 +272,21 @@ Paxos还存在一些优化技巧，减少通信次数，这里不实现，具体
 
 ### JAVA NIO的使用
 
-首先打开socket接收客户连接，在连接成功的channel上挂载一个响应redis请求的handler——[RespReadHandler](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespReadHandler.java)。
-使用[RespDecoder](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java)类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断请求是否解析完成。
+首先打开socket接收客户连接，在连接成功的channel上挂载一个响应redis请求的handler——[RespReadHandler](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/resp/RespReadHandler.java)。
+使用[RespDecoder](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java)类对异步到来的字节报文进行解码，RespReadHandler使用其get方法，判断请求是否解析完成。
 
-解码完成后，使用[KeyValueEngine](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java)进行真正的键值读写处理，此处先不考虑KeyValueEngine的实现细节。
+解码完成后，使用[KeyValueEngine](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java)进行真正的键值读写处理，此处先不考虑KeyValueEngine的实现细节。
 
-执行完客户端命令后，ReadHandler新建一个[RespWriteHandler](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespWriteHandler.java)将结果返回给客户端，
+执行完客户端命令后，ReadHandler新建一个[RespWriteHandler](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/resp/RespWriteHandler.java)将结果返回给客户端，
 接着重新挂载一个RespReadHandler进行下一个请求处理。
 
 重新生成RespWriterHandler和RespReadHandler是为了方便进行GC，当然可以手工管理各种buffer的回收和重利用，这里不做详细设计了。
 
-因为保存的对象都比较小，[KeyValueEngine](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java)并没有使用InputStream之类的模式进一步提升异步性能。
+因为保存的对象都比较小，[KeyValueEngine](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java)并没有使用InputStream之类的模式进一步提升异步性能。
 
 ### 网络协议的解析构造
 
-[RespDecoder](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java)是redis的[RESP协议](https://redis.io/topics/protocol)解码器，
+[RespDecoder](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/resp/RespDecoder.java)是redis的[RESP协议](https://redis.io/topics/protocol)解码器，
 RESP一共有以下几种数据类型：
 
 - SIMPLE_STRING 字符串
@@ -301,17 +301,17 @@ RESP一共有以下几种数据类型：
 
 另外，报文处理往往需要"回溯"操作，从之前某个位置重新开始解析。使用ByteBuffer的flip和rewind、reset太底层，抽象层次不够。
 
-所以通过实现自己的[ByteBuf](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/resp/ByteBuf.java)进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。
+所以通过实现自己的[ByteBuf](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/resp/ByteBuf.java)进行报文解析，主要提供了独立的读写index，方便回溯和读写操作分离。
 底层使用byte[]保存数据，也可以使用direct allocate的ByteBuffer提升性能，但是ByteBuf的生命周期短，数据量较小，无法体现其优势，byte[]在这里满足要求了。
 
 ## 实现复制状态机
 
-[KeyValueEngine](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java)收到请求后，不会立即执行，
-而是交给[ReplicateStateMachine](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java)生成一个新的状态机输入，
+[KeyValueEngine](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/kv/KeyValueEngine.java)收到请求后，不会立即执行，
+而是交给[ReplicateStateMachine](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java)生成一个新的状态机输入，
 并委托其对该输入所在编号的操作达成共识，共识达成后，ReplicateStateMachine回调KeyValueEngine接口执行，返回结果。
 
 如果达成的共识内容不是提交的内容，返回客户端错误，客户端可以决定重试或报错。
-详情见[ReplicateStateMachine](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java)的apply方法。
+详情见[ReplicateStateMachine](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/ReplicateStateMachine.java)的apply方法。
 
 这里需要注意，每个客户端的请求需要分配独立的id，以区分相同内容的客户请求，假如实现命令append，为key对应的value追加内容，两个相同的"append x y"请求如不加id会达成一次共识，但实际只执行了一次，
 value只追加了一个y。这与客户预期不一致，导致bug。解决方法是为待共识内容增加一个uuid：
@@ -365,7 +365,7 @@ public void start(StateTransfer transfer, Executor executor)
 
 leveldb的SET、DEL、GET都是幂等的，重复执行没有问题，只要保证不漏掉命令就行。具体可查看start方法和apply方法。
 
-ReplicateStateMachine并发提交共识请求给共识服务[Coordinator](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/Coordinator.java)。
+ReplicateStateMachine并发提交共识请求给共识服务[Coordinator](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/Coordinator.java)。
 Coordinator可以由各种共识算法实现，这里是Paxos实现。提供Coordinator接口是为了方便测试mock和扩展。
 
 ## 实现Paxos共识算法
@@ -410,22 +410,22 @@ Coordinator可以由各种共识算法实现，这里是Paxos实现。提供Coor
 
 Paxos算法有优化版本，如multi-paxos可以减少一次请求，我们使用原始算法。
 
-[Paxos类](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java)作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。
+[Paxos类](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java)作为Paxos服务的门面类，提供共识请求、共识结果查询等功能入口。
 他为每个共识实例创建相应的发起者（proposer)，同时为本节点和其他节点的发起者创建、管理对应的接收者（acceptor)。
 
-[Proposer](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/proposer/Proposer.java)为算法发起者实现，
-[LocalAcceptor](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java)为算法接收者实现。
+[Proposer](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/proposer/Proposer.java)为算法发起者实现，
+[LocalAcceptor](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java)为算法接收者实现。
 
-各个实例的提案请求可能来自其他节点，所以需要提供一个网络服务[PaxosServer](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/server/PaxosServer.java)，
+各个实例的提案请求可能来自其他节点，所以需要提供一个网络服务[PaxosServer](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/server/PaxosServer.java)，
 通过参数中的编号区分不同共识过程实例，转发给不同实例的本地接收者处理，然后返回响应。
 
-配套的，提供[SyncProxyAcceptor](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/SyncProxyAcceptor.java)作为远端接收者的本地网络代理，
+配套的，提供[SyncProxyAcceptor](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/SyncProxyAcceptor.java)作为远端接收者的本地网络代理，
 请求各个PaxosServer完成提案过程。
 
 这些Proxy及Server相当于简单实现了一个RPC框架。
 
-[InetPeerAcceptors](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/InetPeerAcceptors.java)为SyncProxyAceptor的创建工厂，
-使用一个简单的[连接池](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/ConnectionPool.java)为SyncProxyAcceptor提供nio channel实例。
+[InetPeerAcceptors](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/InetPeerAcceptors.java)为SyncProxyAceptor的创建工厂，
+使用一个简单的[连接池](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/client/ConnectionPool.java)为SyncProxyAcceptor提供nio channel实例。
 
 接口参数使用RESP协议编解码，SyncProxyAcceptor使用同步网络API，简化使用逻辑。
 如prepare方法的代理：
@@ -462,7 +462,7 @@ private void heartbeat() throws IOException, ExecutionException {
 }
 ```
 
-[LocalAcceptor](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java)的prepare方法也需要防止中途宕机，
+[LocalAcceptor](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/acceptor/LocalAcceptor.java)的prepare方法也需要防止中途宕机，
 防止重启时又投票给不同的共识内容。
 ```{.java}
 @Override
@@ -475,7 +475,7 @@ public synchronized Prepare prepare(String n) throws Exception {
     return Prepare.reject(n);
 }
 ```
-[Paxos类](https://github.com/akabldr/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java)保存和恢复acceptor的方法分别如下：
+[Paxos类](https://github.com/rettrue/parliament/tree/master/src/main/java/io/github/parliament/paxos/Paxos.java)保存和恢复acceptor的方法分别如下：
 ```{.java}
 void persistenceAcceptor(int round, LocalAcceptor acceptor) throws IOException, ExecutionException {
     if (Strings.isNullOrEmpty(acceptor.getNp())) {
